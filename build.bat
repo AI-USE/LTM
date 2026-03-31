@@ -1,23 +1,38 @@
 @echo off
-echo SHINOBI ビルドスクリプトを実行中...
-echo PyInstaller を使用して EXE を作成します。
+setlocal
+echo.
+echo  ##########################################################
+echo  #                                                        #
+echo  #      SHINOBI ULTIMATE - HACKER EDITION BUILDER         #
+echo  #                                                        #
+echo  ##########################################################
+echo.
 
-:: 依存関係のチェック
-pip install pyinstaller
+:: 依存関係のチェックとインストール
+echo [1/4] Installing dependencies...
+pip install -r requirements.txt
 
-:: ビルドコマンド
-:: --onefile: 単一の実行ファイルにする
-:: --noconsole: 起動時にコンソールを表示しない (UIメイン)
-:: --icon: アイコンの指定 (あれば)
-:: --add-data: 必要なリソース（config.json, assets等）を含める
+:: ビルドコマンドの実行
+echo [2/4] Compiling SHINOBI to Binary...
+:: --onefile: 1つの実行ファイルにまとめる
+:: --noconsole: 起動時にコマンドプロンプトを出さない
+:: --add-data: 資産ファイルを含める (Windowsはセミコロン区切り)
+:: --clean: 一時ファイルを削除
 
-pyinstaller --noconsole --onefile ^
-    --add-data "SHINOBI/assets;SHINOBI/assets" ^
+pyinstaller --noconsole --onefile --clean ^
     --add-data "SHINOBI/src;SHINOBI/src" ^
-    --name "SHINOBI_ULTIMATE" ^
+    --add-data "SHINOBI/assets;SHINOBI/assets" ^
+    --name "SHINOBI_HACKER_EDITION" ^
     SHINOBI/src/main.py
 
 echo.
-echo ビルドが完了しました。
-echo dist/SHINOBI_ULTIMATE.exe を管理者権限で実行してください。
+echo [3/4] Build process finished.
+echo Output: dist/SHINOBI_HACKER_EDITION.exe
+
+echo.
+echo [4/4] Post-build instructions:
+echo  - Run as Administrator for full Registry/Shell features.
+echo  - Recovery keys should be kept separately.
+echo.
 pause
+endlocal

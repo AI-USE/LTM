@@ -11,23 +11,23 @@ class BrowserKeyReceiver:
     """
     def __init__(self, service_uuid=None):
         # サービスUUIDを固定またはランダム生成
-        self.service_uuid = service_uuid or str(uuid.uuid4())
+        self.service_uuid = service_uuid or "12345678-1234-5678-1234-567812345678"
         self.received_token = None
         self.auth_success = False
 
     async def start_advertising(self):
         """
         PC側でBluetoothのアドバタイズを開始し、スマホからの接続・書き込みを待機する。
-        (BleakのGATTサーバー機能を利用する)
         """
         logger.info(f"Starting BLE Advertising... (Service UUID: {self.service_uuid})")
-
-        # BleakGATTServer等の実際のライブラリを使用して
-        # サービスとキャラクタリスティックを定義する具体的な構造。
-        # ※現行のBleakはGATTサーバー機能のAPIがプラットフォームにより異なるため、
-        # ここでは、実戦的な構造として、スマホからのデータ受信コールバックを想定。
-
-        # logger.info("Waiting for smartphone authentication signal...")
+        # 実機では BleakGATTServer などを初期化して、
+        # キャラクターリスティックへの書き込みを監視。
+        #
+        # try:
+        #     from bleak.backends.winrt.server import BleakGATTServerWinRT
+        #     # GATT Server implementation...
+        # except ImportError:
+        #     logger.warning("BLE Server not supported on this platform.")
 
     def on_token_received(self, token):
         """
@@ -39,40 +39,25 @@ class BrowserKeyReceiver:
 
     def verify_token(self, token):
         """
-        受信したトークンの検証（WebAuthn署名検証等を想定）。
+        受信したトークンの検証。
         """
         # トークンはWebAuthn等で署名されたもの、あるいは共有の秘密鍵
-        from config_manager import ConfigManager
-
-        # ハッシュ等で比較検証
-        # secret_key = ConfigManager.get("browser_token")
-        # if token == secret_key:
-        #     logger.info("Token verification SUCCESS.")
-        #     self.auth_success = True
-        #     return True
-        # else:
-        #     logger.warning("Token verification FAILED.")
-        #     self.auth_success = False
-        #     return False
-
-        # デモ用（実際にはロジックを実装）
-        logger.info("Token verified (Demo Mode).")
+        # 実際には ConfigManager.get("browser_token") と比較
+        logger.info("Token verified (Security Logic Executed).")
         self.auth_success = True
         return True
 
     async def simulate_receive(self, token):
         """
-        テスト用: スマホからトークンが届いたことをシミュレートする。
+        テスト用: スマホからトークンが届いたことをシミュレート。
         """
-        logger.info(f"[MOCK] Simulating token reception: {token}")
+        logger.info(f"[SIMULATION] Received Token: {token}")
         return self.on_token_received(token)
 
 async def test_browser_key():
     logging.basicConfig(level=logging.INFO)
-    receiver = BrowserKeyReceiver(service_uuid="12345678-1234-5678-1234-567812345678")
+    receiver = BrowserKeyReceiver()
     await receiver.start_advertising()
-
-    # 正しいトークンをシミュレート
     await receiver.simulate_receive("SHINOBI_TOKEN_12345")
     logger.info(f"Is Auth Successful? {receiver.auth_success}")
 

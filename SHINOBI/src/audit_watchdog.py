@@ -2,21 +2,28 @@ import os
 import sqlite3
 import time
 import datetime
-import shutil
+import cv2
+import logging
+
+logger = logging.getLogger("SHINOBI.Audit")
 
 class AuditLog:
     """
-    7日間のローテーション監査ログ（顔写真＋データベース）。
+    7日間のローテーション監査ログ（実画像 + DB）。
     """
-    def __init__(self, db_path="SHINOBI/logs/audit.db", img_dir="SHINOBI/logs/audit"):
-        self.db_path = db_path
-        self.img_dir = img_dir
+    def __init__(self, db_path=None, img_dir=None):
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.db_path = db_path or os.path.join(base_dir, "logs", "audit.db")
+        self.img_dir = img_dir or os.path.join(base_dir, "logs", "audit")
+
         self._init_db()
         self.cleanup_old_logs()
 
     def _init_db(self):
         if not os.path.exists(os.path.dirname(self.db_path)):
             os.makedirs(os.path.dirname(self.db_path))
+        if not os.path.exists(self.img_dir):
+            os.makedirs(self.img_dir)
 
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -37,12 +44,19 @@ class AuditLog:
         ログを記録。顔写真がある場合は保存。
         """
         timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        img_path = f"{self.img_dir}/{timestamp_str}.jpg"
+        img_filename = f"{timestamp_str}.jpg"
+        img_path = os.path.join(self.img_dir, img_filename)
 
-        # 本来はOpenCV等でフレームを保存
-        # cv2.imwrite(img_path, face_img_frame)
-        with open(img_path, "w") as f:
-            f.write("DUMMY IMAGE DATA")
+        # 実際にOpenCVでフレームを保存（引数がない場合はカメラから取得を試みる）
+        if face_img_frame is not None:
+            cv2.imwrite(img_path, face_img_frame)
+        else:
+            video_capture = cv2.VideoCapture(0)
+            if video_capture.isOpened():
+                ret, frame = video_capture.read()
+                if ret:
+                    cv2.imwrite(img_path, frame)
+                video_capture.release()
 
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -53,49 +67,33 @@ class AuditLog:
         conn.commit()
         conn.close()
 
-        print(f"Logged: {route} - {status}")
+        logger.info(f"Audit log added: {route} - {status}")
 
     def cleanup_old_logs(self, days=7):
-        """
-        8日以上前のデータをDBと物理ファイルの両方から削除。
-        """
         cutoff_date = datetime.datetime.now() - datetime.timedelta(days=days)
         cutoff_str = cutoff_date.strftime("%Y-%m-%d %H:%M:%S")
 
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-
-        # 削除対象のファイルパスを取得
         cursor.execute("SELECT face_img_path FROM audit_logs WHERE timestamp < ?", (cutoff_str,))
         old_files = cursor.fetchall()
 
         for (f_path,) in old_files:
             if os.path.exists(f_path):
                 os.remove(f_path)
-                print(f"Deleted old evidence: {f_path}")
 
-        # DBレコードを削除
         cursor.execute("DELETE FROM audit_logs WHERE timestamp < ?", (cutoff_str,))
         conn.commit()
         conn.close()
 
 class Watchdog:
     """
-    相互監視プロセスの概念。
-    実際には別ファイル(EXE)として実行され、互いのPIDが死んだら再起動する。
+    プロセスの死活監視。
     """
-    def __init__(self, main_process_name="shinobi.exe"):
+    def __init__(self, main_process_name="SHINOBI_HACKER_EDITION.exe"):
         self.main_process_name = main_process_name
 
     def monitor(self):
-        print(f"Watchdog: Monitoring {self.main_process_name}...")
-        # 実際にはpsutil等でプロセスを監視
-        # もしプロセスが落ちていれば 0.5秒以内に再起動
-
-if __name__ == "__main__":
-    audit = AuditLog()
-    audit.log_entry("Stealth (Face+BT)")
-    audit.log_entry("Recovery Route (PIN Only)", status="SUCCESS (RED ALERT)")
-
-    # 擬似的なクリーンアップテスト (手動で古い日付を挿入すれば動作確認可能)
-    audit.cleanup_old_logs()
+        # 実機では別プロセス（EXE）として動き、psutil等を使用して監視
+        logger.info(f"Watchdog initialized: Monitoring {self.main_process_name}...")
+        pass

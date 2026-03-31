@@ -6,7 +6,9 @@ class ConfigManager:
     """
     設定値とシークレットの管理。
     """
-    CONFIG_PATH = "SHINOBI/assets/config.json"
+    # 実行ファイルのディレクトリ基準でパスを計算（EXE化対応）
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    CONFIG_PATH = os.path.join(BASE_DIR, "assets", "config.json")
 
     @staticmethod
     def initialize():
@@ -14,12 +16,12 @@ class ConfigManager:
             os.makedirs(os.path.dirname(ConfigManager.CONFIG_PATH))
 
         if not os.path.exists(ConfigManager.CONFIG_PATH):
-            # デフォルト設定 (初回のみ)
             default_config = {
                 "pin_hash": hashlib.sha256("0000".encode()).hexdigest(), # デフォルトPIN: 0000
                 "browser_token_hash": hashlib.sha256("default_token".encode()).hexdigest(),
                 "rssi_threshold": -70,
-                "face_threshold": 0.5
+                "face_threshold": 0.5,
+                "target_mac": "00:00:00:00:00:00"
             }
             with open(ConfigManager.CONFIG_PATH, "w") as f:
                 json.dump(default_config, f, indent=4)

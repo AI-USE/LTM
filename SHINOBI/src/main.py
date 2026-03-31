@@ -5,9 +5,12 @@ import logging
 import threading
 import tkinter as tk
 
-# src ディレクトリを sys.path に追加
-sys.path.append(os.path.join(os.path.dirname(__file__), 'SHINOBI/src'))
+# 実行ファイルからの相対パスを正確に解決
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.append(CURRENT_DIR)
 
+# 自作モジュールのインポート
 from mfa_engine import MFAEngine, SystemState
 from bt_monitor import BluetoothMonitor
 from face_auth import FaceAuth
@@ -49,19 +52,18 @@ class ShinobiApp:
         """
         while True:
             if self.engine.state != SystemState.UNLOCKED:
-                # BTスキャン
+                # Bluetooth スキャンの実行
                 await self.bt.scan_nearby_devices()
                 await self.engine.update_auth_factor("BT_NEARBY", self.bt.is_nearby())
 
-                # 顔認証の試行 (UIスレッドへの通知はイベント等で行う)
-                # success, dist = self.face.capture_and_authenticate()
-                # await self.engine.update_auth_factor("FACE", success)
+                # 顔認証の試行 (UIを介さずバックグラウンドで照合)
+                # match, dist = self.face.authenticate()
+                # await self.engine.update_auth_factor("FACE", match)
 
-            await asyncio.sleep(10) # 10秒ごとに監視
+            await asyncio.sleep(10)
 
     def on_auth_success(self, route):
-        logger.info(f"Authentication Success via {route}")
-        # UIから呼ばれる。OSの制限を解除し、explorerを起動
+        logger.info(f"Access Granted: Route={route}")
         self.os_ctrl.set_lock_mode(False)
         self.kb_hook.stop()
         self.audit.log_entry(route)
@@ -69,11 +71,12 @@ class ShinobiApp:
         asyncio.run_coroutine_threadsafe(self.engine.unlock_system(route), self.loop)
 
     def run(self):
-        logger.info("SHINOBI System Starting...")
+        logger.info("Initializing SHINOBI CORE System...")
 
-        # 1. 権限チェック
+        # 1. 管理者権限とBitLocker状態の確認
         if not is_admin():
-            logger.warning("Running without Admin privileges. Some features (Registry/Shell) will be disabled.")
+            logger.warning("ELEVATED PRIVILEGES REQUIRED for registry and hook operations.")
+        self.os_ctrl.check_bitlocker_status()
 
         # 2. キーボードフック開始
         self.kb_hook.start()
@@ -86,7 +89,7 @@ class ShinobiApp:
         asyncio.run_coroutine_threadsafe(self.background_monitoring(), self.loop)
         asyncio.run_coroutine_threadsafe(self.engine.heartbeat_check(), self.loop)
 
-        # 5. Tkinter メインループ (ロック画面)
+        # 5. Tkinter メインループ (ロック画面起動)
         self.root = tk.Tk()
         self.lock_screen = ShinobiLockScreen(self.root, on_auth_success=self.on_auth_success)
 

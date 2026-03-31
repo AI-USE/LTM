@@ -2,6 +2,7 @@ import ctypes
 import os
 import platform
 import logging
+import subprocess
 from tkinter import messagebox
 
 # ロギング設定
@@ -20,11 +21,32 @@ def is_admin():
 class OSRegistryController:
     """
     Windowsのレジストリを操作し、機能を制限/復元するクラス。
+    BitLocker (TPM 2.0) 連携を含む。
     """
     POLICY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Policies\System"
 
     def __init__(self):
         self.restrictions = ["DisableTaskMgr", "DisableLockWorkstation", "DisableChangePassword", "DisableLogoff"]
+
+    def check_bitlocker_status(self):
+        """
+        BitLockerの状態を確認 (manage-bde 使用)。
+        """
+        if platform.system() != "Windows":
+            return "N/A (MOCK)"
+
+        try:
+            # 管理者権限で manage-bde -status を実行
+            result = subprocess.check_output(["manage-bde", "-status", "C:"], shell=True, stderr=subprocess.STDOUT).decode('cp932')
+            if "保護されています" in result or "Protection On" in result:
+                logger.info("BitLocker Protection: ON (TPM 2.0 Linked)")
+                return "ON"
+            else:
+                logger.warning("BitLocker Protection: OFF (Security Risk!)")
+                return "OFF"
+        except Exception as e:
+            logger.error(f"Failed to check BitLocker status: {e}")
+            return "ERROR"
 
     def set_lock_mode(self, enabled=True):
         if platform.system() != "Windows":

@@ -1,4 +1,4 @@
-# SHINOBI Ultimate Security System - Dependencies
+# SHINOBI Ultimate Security System - Version 2.0 (Hacker Edition)
 # Python 3.10+ recommended
 
 # Core Computer Vision & Biometrics
@@ -11,12 +11,11 @@ pillow
 bleak
 
 # Windows Integration
-# ※Windows環境のみで動作します
 pywin32
 
-# GUI
-# tkinter is usually included in Python standard library,
-# but may need 'python3-tk' on some Linux distros.
+# GUI & Effects
+# tkinter is standard
+# No extra libs needed for canvas effects
 
 # Build & EXE
 pyinstaller
