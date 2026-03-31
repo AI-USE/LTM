@@ -12,8 +12,8 @@ class SystemState(Enum):
 
 class MFAEngine:
     """
-    刷新されたMFAエンジン。
-    任意の2要素クリアでの解錠、およびPIN失敗ペナルティを実装。
+    MFAエンジン (v3.4)
+    スマホ鍵による単体解錠をサポート。
     """
     def __init__(self):
         self.state = SystemState.LOCKED_STRICT
@@ -33,8 +33,12 @@ class MFAEngine:
 
     def check_unlock_conditions(self):
         """
-        任意の2要素がクリアされているか判定。
+        解錠条件の判定。
         """
+        # 特例: スマホ鍵 (BROWSER_KEY) がクリアされていれば、モードに関わらず即解錠。
+        if self.auth_status["BROWSER_KEY"]:
+            return True, "Mobile Key (Priority)"
+
         cleared_factors = [k for k, v in self.auth_status.items() if v]
         count = len(cleared_factors)
 
@@ -48,18 +52,13 @@ class MFAEngine:
             if count >= 2:
                 return True, f"Multi-Factor ({'+'.join(cleared_factors)})"
 
-        return False, f"Need more factors ({count}/2 cleared)"
+        return False, f"Waiting for Authentication ({count}/2 cleared)"
 
     def record_pin_failure(self):
-        """
-        PIN失敗時にペナルティ時間を計算。
-        """
         self.pin_fail_count += 1
-        # 3回目から段階的にロック
         if self.pin_fail_count >= 3:
-            penalty = (self.pin_fail_count - 2) * 30 # 30s, 60s, 90s...
+            penalty = (self.pin_fail_count - 2) * 30
             self.lockout_until = time.time() + penalty
-            logger.warning(f"PIN Lockout active for {penalty}s")
             return penalty
         return 0
 
@@ -78,31 +77,25 @@ class MFAEngine:
     async def unlock_system(self, route):
         self.state = SystemState.UNLOCKED
         self.last_unlock_time = time.time()
-        self.pin_fail_count = 0 # 成功時はリセット
+        self.pin_fail_count = 0
         logger.info(f"System Unlocked via {route}")
 
     async def lock_system(self, manual=False):
         now = time.time()
         from config_manager import ConfigManager
         window = (ConfigManager.get("smart_mitigation_hours") or 1) * 3600
-
         if not manual and (now - self.last_unlock_time) < window:
             self.state = SystemState.LOCKED_MITIGATED
         else:
             self.state = SystemState.LOCKED_STRICT
-
         self.reset_auth_factors()
         logger.info(f"System Locked. State: {self.state}")
 
     async def heartbeat_check(self):
-        """10分おきのBT生存確認。"""
         from config_manager import ConfigManager
         while True:
             interval = (ConfigManager.get("heartbeat_interval_mins") or 10) * 60
             await asyncio.sleep(interval)
-
             if self.state == SystemState.LOCKED_MITIGATED:
-                # BTが離れていれば強制的に厳格モードへ
                 if not self.auth_status["BT_NEARBY"]:
-                    logger.info("Heartbeat: BT lost. Escalating to STRICT.")
                     self.state = SystemState.LOCKED_STRICT
