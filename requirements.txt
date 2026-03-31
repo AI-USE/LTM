@@ -1,4 +1,22 @@
-flask
-requests
-bs4
-gunicorn
+# SHINOBI Ultimate Security System - Dependencies
+# Python 3.10+ recommended
+
+# Core Computer Vision & Biometrics
+opencv-python
+face-recognition
+numpy
+pillow
+
+# Bluetooth & Networking
+bleak
+
+# Windows Integration
+# ※Windows環境のみで動作します
+pywin32
+
+# GUI
+# tkinter is usually included in Python standard library,
+# but may need 'python3-tk' on some Linux distros.
+
+# Build & EXE
+pyinstaller

@@ -2,10 +2,10 @@ import ctypes
 import os
 import platform
 import logging
+from tkinter import messagebox
 
 # ロギング設定
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
-logger = logging.getLogger("SHINOBI")
+logger = logging.getLogger("SHINOBI.OS")
 
 def is_admin():
     """
@@ -20,7 +20,6 @@ def is_admin():
 class OSRegistryController:
     """
     Windowsのレジストリを操作し、機能を制限/復元するクラス。
-    権限チェックを伴う。
     """
     POLICY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Policies\System"
 
@@ -33,7 +32,7 @@ class OSRegistryController:
             return
 
         if not is_admin():
-            logger.error("Admin privileges required to modify registry.")
+            logger.error("Registry modify failed: Admin privileges required.")
             return
 
         import winreg
@@ -48,23 +47,44 @@ class OSRegistryController:
             logger.error(f"Failed to update registry: {e}")
 
     def switch_to_custom_shell(self, exe_path):
+        """
+        Windowsのシェルを explorer.exe から本アプリに変更する。
+        """
         SHELL_REG_PATH = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
         if platform.system() != "Windows":
             logger.info(f"[MOCK] Switch Shell to: {exe_path}")
             return
 
         if not is_admin():
-            logger.error("Admin privileges required to change Windows shell.")
+            logger.error("Shell change failed: Admin privileges required.")
+            return
+
+        # ⚠️ 危険な操作のため、ユーザーに最終確認
+        if not messagebox.askyesno("SHINOBI - 警告",
+            "Windowsシェルを変更しますか？\n不具合が発生した場合、デスクトップが表示されなくなるリスクがあります。\n(リカバリ手順を熟知している場合のみ実行してください)"):
+            logger.info("Shell change cancelled by user.")
             return
 
         import winreg
         try:
+            # バックアップ作成
+            key_read = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, SHELL_REG_PATH, 0, winreg.KEY_READ)
+            old_shell, _ = winreg.QueryValueEx(key_read, "Shell")
+            winreg.CloseKey(key_read)
+            logger.info(f"Current shell backup: {old_shell}")
+
+            # 新しいシェルを設定
             key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, SHELL_REG_PATH, 0, winreg.KEY_SET_VALUE)
             winreg.SetValueEx(key, "Shell", 0, winreg.REG_SZ, exe_path)
             winreg.CloseKey(key)
             logger.info(f"Custom shell set to: {exe_path}")
+            messagebox.showinfo("SHINOBI", f"シェルを {exe_path} に変更しました。\n次回のログインから有効になります。")
         except Exception as e:
             logger.error(f"Failed to change shell: {e}")
+            messagebox.showerror("SHINOBI", f"シェル変更エラー: {e}")
 
     def restore_explorer_shell(self):
+        """
+        シェルを標準の explorer.exe に戻す。
+        """
         self.switch_to_custom_shell("explorer.exe")
