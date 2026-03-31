@@ -13,15 +13,15 @@ def is_admin():
     Windows上で管理者権限（Admin）があるか確認。
     """
     try:
-        return ctypes.windll.shell32.IsUserAnAdmin() != 0
-    except AttributeError:
-        # Linux/Mac環境などでのフォールバック
+        if platform.system() == "Windows":
+            return ctypes.windll.shell32.IsUserAnAdmin() != 0
         return os.getuid() == 0 if hasattr(os, 'getuid') else False
+    except Exception:
+        return False
 
 class OSRegistryController:
     """
     Windowsのレジストリを操作し、機能を制限/復元するクラス。
-    BitLocker (TPM 2.0) 連携を含む。
     """
     POLICY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Policies\System"
 
@@ -37,18 +37,22 @@ class OSRegistryController:
 
         try:
             # 管理者権限で manage-bde -status を実行
-            result = subprocess.check_output(["manage-bde", "-status", "C:"], shell=True, stderr=subprocess.STDOUT).decode('cp932')
-            if "保護されています" in result or "Protection On" in result:
-                logger.info("BitLocker Protection: ON (TPM 2.0 Linked)")
+            # ※日本語環境と英語環境の両方を想定
+            result = subprocess.check_output(["manage-bde", "-status", "C:"], shell=True, stderr=subprocess.STDOUT).decode('cp932', errors='ignore')
+            if any(x in result for x in ["保護されています", "Protection On", "Encryption On"]):
+                logger.info("BitLocker Protection: ON (Verified)")
                 return "ON"
             else:
-                logger.warning("BitLocker Protection: OFF (Security Risk!)")
+                logger.warning("BitLocker Protection: OFF (SECURITY WARNING)")
                 return "OFF"
         except Exception as e:
             logger.error(f"Failed to check BitLocker status: {e}")
             return "ERROR"
 
     def set_lock_mode(self, enabled=True):
+        """
+        レジストリ制限の切り替え。
+        """
         if platform.system() != "Windows":
             logger.info(f"[MOCK] Registry set_lock_mode: {'ENABLED' if enabled else 'DISABLED'}")
             return
@@ -109,4 +113,7 @@ class OSRegistryController:
         """
         シェルを標準の explorer.exe に戻す。
         """
-        self.switch_to_custom_shell("explorer.exe")
+        if platform.system() == "Windows":
+            self.switch_to_custom_shell("explorer.exe")
+        else:
+            logger.info("[MOCK] Restore explorer shell.")

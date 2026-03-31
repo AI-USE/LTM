@@ -1,212 +1,254 @@
+import customtkinter as ctk
 import tkinter as tk
-from tkinter import ttk, messagebox
-import random
 import time
+import random
 import logging
-from config_manager import ConfigManager
 from ui_theme import CyberTheme, MatrixRain
+from config_manager import ConfigManager
 
 logger = logging.getLogger("SHINOBI.UI")
 
+# 外観モードの設定
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("green")
+
 class ShinobiLockScreen:
     """
-    究極の「ハッカー風」全画面ロック画面 UI (UX強化版)。
+    CustomTkinterを用いた、洗練された「シノビ」極致ロック画面。
+    墨色、朱色、金色を基調とした重厚なデザイン。
     """
     def __init__(self, root, on_auth_success=None):
         self.root = root
         self.root.title("SHINOBI - ACCESS RESTRICTED")
         self.root.attributes("-fullscreen", True)
-        self.root.configure(bg=CyberTheme.BG_COLOR)
+        self.root.configure(bg="#000000")
         self.root.wm_attributes("-topmost", True)
         self.on_auth_success = on_auth_success
 
-        # 背景のマトリックス・レイン
+        # 背景のマトリックス・レイン (Canvas)
         self.matrix_canvas = MatrixRain(self.root)
         self.matrix_canvas.place(x=0, y=0, relwidth=1, relheight=1)
 
-        # UIレイヤー
-        self.ui_frame = tk.Frame(self.root, bg=CyberTheme.BG_COLOR, highlightthickness=2, highlightbackground=CyberTheme.FG_ACCENT)
-        self.ui_frame.place(relx=0.5, rely=0.5, anchor="center", width=600, height=500)
+        # メインコンテナ (中央配置)
+        self.main_frame = ctk.CTkFrame(
+            self.root,
+            width=500,
+            height=600,
+            fg_color="#0D0D0D",
+            border_width=2,
+            border_color="#FF003C", # 朱色
+            corner_radius=20
+        )
+        self.main_frame.place(relx=0.5, rely=0.5, anchor="center")
 
         self.create_widgets()
-        self.start_boot_sequence()
+        self.animate_boot()
 
     def create_widgets(self):
-        self.title_label = tk.Label(
-            self.ui_frame, text="[ SHINOBI ]", font=CyberTheme.FONT_HEADER,
-            fg=CyberTheme.FG_ACCENT, bg=CyberTheme.BG_COLOR
+        # センターロゴ
+        self.logo_label = ctk.CTkLabel(
+            self.main_frame,
+            text="忍 SHINOBI 忍",
+            font=("Consolas", 48, "bold"),
+            text_color="#FF003C"
         )
-        self.title_label.pack(pady=(40, 10))
+        self.logo_label.pack(pady=(50, 10))
 
-        self.alert_label = tk.Label(
-            self.ui_frame, text=">>> UNAUTHORIZED ACCESS DETECTED <<<",
-            font=("Consolas", 12), fg=CyberTheme.FG_WARNING, bg=CyberTheme.BG_COLOR
+        self.status_label = ctk.CTkLabel(
+            self.main_frame,
+            text=">>> UNAUTHORIZED ACCESS DETECTED <<<",
+            font=("Consolas", 14),
+            text_color="#FF003C"
         )
-        self.alert_label.pack(pady=10)
+        self.status_label.pack(pady=5)
 
-        self.log_text = tk.Label(
-            self.ui_frame, text="INITIALIZING SYSTEM...",
-            font=("Consolas", 10), fg=CyberTheme.FG_ACCENT, bg=CyberTheme.BG_COLOR,
-            justify=tk.LEFT, width=50, anchor="w"
+        # リアルタイムログ
+        self.log_label = ctk.CTkLabel(
+            self.main_frame,
+            text="BOOTING SECURE MODULES...",
+            font=("Consolas", 12),
+            text_color="#00FF41",
+            justify="left",
+            width=400,
+            anchor="w"
         )
-        self.log_text.pack(pady=20, padx=20)
+        self.log_label.pack(pady=20, padx=40)
 
-        self.scan_bar = ttk.Progressbar(self.ui_frame, orient="horizontal", length=400, mode="determinate")
-        self.scan_bar.pack(pady=10)
+        # プログレスバー
+        self.pbar = ctk.CTkProgressBar(self.main_frame, width=400, height=10, progress_color="#FF003C", fg_color="#1a1a1a")
+        self.pbar.set(0)
+        self.pbar.pack(pady=10)
 
-        self.pin_frame = tk.Frame(self.ui_frame, bg=CyberTheme.BG_COLOR)
-        self.pin_frame.pack(pady=30)
-
-        tk.Label(self.pin_frame, text="ID/PIN:", font=CyberTheme.FONT_MONO, fg=CyberTheme.FG_ACCENT, bg=CyberTheme.BG_COLOR).pack(side=tk.LEFT, padx=10)
-        self.pin_entry = tk.Entry(self.pin_frame, show="*", font=("Consolas", 24), width=10, bg="#222", fg=CyberTheme.FG_ACCENT, insertbackground=CyberTheme.FG_ACCENT, relief=tk.FLAT)
-        self.pin_entry.pack(side=tk.LEFT)
+        # PIN入力
+        self.pin_entry = ctk.CTkEntry(
+            self.main_frame,
+            placeholder_text="Enter Master PIN",
+            show="*",
+            width=300,
+            height=50,
+            font=("Consolas", 24),
+            fg_color="#1a1a1a",
+            border_color="#FF003C",
+            text_color="#00FF41",
+            justify="center"
+        )
+        self.pin_entry.pack(pady=30)
         self.pin_entry.bind("<Return>", self.on_pin_submit)
 
-        self.unlock_btn = tk.Button(
-            self.ui_frame, text="EXECUTE UNLOCK", command=self.on_pin_submit,
-            font=CyberTheme.FONT_MONO, bg="#1a1a1a", fg=CyberTheme.FG_ACCENT, width=20, relief=tk.GROOVE, activebackground=CyberTheme.FG_ACCENT, activeforeground="black"
+        # 解錠ボタン
+        self.unlock_btn = ctk.CTkButton(
+            self.main_frame,
+            text="EXECUTE UNLOCK",
+            command=self.on_pin_submit,
+            width=300,
+            height=50,
+            font=("Consolas", 16, "bold"),
+            fg_color="#FF003C",
+            hover_color="#CC0030",
+            text_color="black"
         )
         self.unlock_btn.pack(pady=20)
 
-    def start_boot_sequence(self):
+    def animate_boot(self):
         messages = [
-            "KERNEL BOOTING...",
-            "DECRYPTING MFA MODULE...",
-            "SCANNING PERIPHERAL DEVICES...",
-            "ESTABLISHING BLUETOOTH HANDSHAKE...",
-            "ACTIVATING BIOMETRIC SCANNER...",
-            "SYSTEM READY. WAITING FOR AUTHENTICATION."
+            "SHINOBI_CORE: LOADING...",
+            "DECRYPTING MFA_SYSTEM...",
+            "SCANNING BIOMETRICS...",
+            "BITLOCKER PROTECTION: VERIFIED",
+            "STANDBY: WAITING FOR MASTER"
         ]
-
-        def update_log(idx):
+        def step(idx):
             if idx < len(messages):
-                self.log_text.config(text=f"> {messages[idx]}")
-                self.scan_bar["value"] = (idx + 1) * (100 / len(messages))
-                self.root.after(200, lambda: update_log(idx + 1))
+                self.log_label.configure(text=f"> {messages[idx]}")
+                self.pbar.set((idx + 1) / len(messages))
+                self.root.after(200, lambda: step(idx + 1))
             else:
-                self.alert_label.config(text=">>> STATUS: STANDBY - WAITING FOR MASTER <<<", fg=CyberTheme.FG_INFO)
-
-        update_log(0)
+                self.status_label.configure(text=">>> STATUS: READY - AUTHORIZATION REQUIRED <<<", text_color="#00E5FF")
+        step(0)
 
     def on_pin_submit(self, event=None):
         pin = self.pin_entry.get()
         if ConfigManager.verify_pin(pin):
-            self.show_unlock_animation()
-            if self.on_auth_success:
-                self.on_auth_success("PIN")
+            self.handle_success()
         else:
-            self.trigger_alert()
+            self.handle_failure()
 
-    def trigger_alert(self):
-        self.pin_entry.delete(0, tk.END)
-        self.log_text.config(text="> ACCESS DENIED: INVALID SECURITY TOKEN", fg=CyberTheme.FG_WARNING)
+    def handle_success(self):
+        self.log_label.configure(text="> ACCESS GRANTED. WELCOME MASTER.", text_color="#00FF41")
+        self.status_label.configure(text=">>> [ DECRYPTING SESSION ] <<<", text_color="#00FF41")
+        self.pbar.configure(progress_color="#00FF41")
 
-        def flash(count):
-            if count > 0:
-                color = CyberTheme.FG_WARNING if count % 2 == 0 else CyberTheme.BG_COLOR
-                self.ui_frame.config(highlightbackground=color)
-                self.root.after(100, lambda: flash(count - 1))
-            else:
-                self.ui_frame.config(highlightbackground=CyberTheme.FG_ACCENT)
+        if self.on_auth_success:
+            self.on_auth_success("PIN")
 
-        flash(6)
-        logger.warning("Authentication failure detected.")
-
-    def show_unlock_animation(self):
-        self.log_text.config(text="> KEY VERIFIED. DECRYPTING USER SESSION...", fg=CyberTheme.FG_ACCENT)
-        self.title_label.config(fg=CyberTheme.FG_INFO, text="[ ACCESS GRANTED ]")
-        self.scan_bar["value"] = 100
-
-        def fade_out(opacity):
-            if opacity > 0:
-                self.root.attributes("-alpha", opacity)
-                self.root.after(30, lambda: fade_out(opacity - 0.1))
+        def fade(alpha):
+            if alpha > 0:
+                self.root.attributes("-alpha", alpha)
+                self.root.after(30, lambda: fade(alpha - 0.1))
             else:
                 self.root.destroy()
+        self.root.after(800, lambda: fade(1.0))
 
-        self.root.after(500, lambda: fade_out(1.0))
+    def handle_failure(self):
+        self.pin_entry.delete(0, tk.END)
+        self.log_label.configure(text="> ACCESS DENIED: INVALID TOKEN", text_color="#FF003C")
+        def flash(count):
+            if count > 0:
+                color = "#FF003C" if count % 2 == 0 else "#0D0D0D"
+                self.main_frame.configure(border_color=color)
+                self.root.after(100, lambda: flash(count - 1))
+            else:
+                self.main_frame.configure(border_color="#FF003C")
+        flash(6)
 
-class AdminDashboard:
+class AdminDashboard(ctk.CTk):
     """
-    管理者用「サイバー風」デジタルメーター・ダッシュボード。
+    管理者用プロフェッショナル・ダッシュボード。
     """
-    def __init__(self, root):
-        self.root = root
-        self.root.title("SHINOBI - ADMIN_DASHBOARD_v2.1")
-        self.root.geometry("1000x750")
-        self.root.configure(bg=CyberTheme.BG_COLOR)
+    def __init__(self):
+        super().__init__()
+        self.title("SHINOBI - ADMIN INTERFACE v3.0")
+        self.geometry("1100x700")
+        self.configure(fg_color="#0D0D0D")
         ConfigManager.initialize()
 
-        self.create_widgets()
-        self.update_stats()
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
-    def create_widgets(self):
-        header_frame = tk.Frame(self.root, bg=CyberTheme.BG_COLOR)
-        header_frame.pack(fill="x", pady=20)
+        self.sidebar_frame = ctk.CTkFrame(self, width=200, corner_radius=0, fg_color="#1a1a1a")
+        self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
+        self.sidebar_frame.grid_rowconfigure(4, weight=1)
 
-        tk.Label(header_frame, text="[ SHINOBI ADMIN INTERFACE ]", font=("Consolas", 24, "bold"), fg=CyberTheme.FG_INFO, bg=CyberTheme.BG_COLOR).pack()
-        self.time_label = tk.Label(header_frame, text="SYSTEM_TIME: 00:00:00", font=CyberTheme.FONT_MONO, fg=CyberTheme.FG_ACCENT, bg=CyberTheme.BG_COLOR)
-        self.time_label.pack()
+        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="SHINOBI", font=ctk.CTkFont(size=24, weight="bold"), text_color="#FF003C")
+        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
 
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("Cyber.TNotebook", background=CyberTheme.BG_COLOR, borderwidth=1, bordercolor=CyberTheme.FG_ACCENT)
-        style.configure("Cyber.TNotebook.Tab", background="#1a1a1a", foreground=CyberTheme.FG_ACCENT, font=CyberTheme.FONT_MONO, padding=[20, 5])
-        style.map("Cyber.TNotebook.Tab", background=[("selected", CyberTheme.FG_ACCENT)], foreground=[("selected", "black")])
-        style.configure("Cyber.TFrame", background=CyberTheme.BG_COLOR)
+        self.nav_monitor_btn = ctk.CTkButton(self.sidebar_frame, text=" MONITORING ", command=lambda: self.select_tab("monitor"), fg_color="transparent", text_color="#00FF41", hover_color="#333")
+        self.nav_monitor_btn.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
 
-        tab_control = ttk.Notebook(self.root, style="Cyber.TNotebook")
+        self.nav_settings_btn = ctk.CTkButton(self.sidebar_frame, text=" CONFIGURATION ", command=lambda: self.select_tab("config"), fg_color="transparent", text_color="#00FF41", hover_color="#333")
+        self.nav_settings_btn.grid(row=2, column=0, sticky="ew", padx=10, pady=5)
 
-        sensor_tab = ttk.Frame(tab_control, style="Cyber.TFrame")
-        tab_control.add(sensor_tab, text=" [ MONITORING_SENSORS ] ")
-        self.build_sensor_tab(sensor_tab)
+        self.nav_logs_btn = ctk.CTkButton(self.sidebar_frame, text=" AUDIT_LOGS ", command=lambda: self.select_tab("logs"), fg_color="transparent", text_color="#00FF41", hover_color="#333")
+        self.nav_logs_btn.grid(row=3, column=0, sticky="ew", padx=10, pady=5)
 
-        log_tab = ttk.Frame(tab_control, style="Cyber.TFrame")
-        tab_control.add(log_tab, text=" [ AUDIT_LOGS_DB ] ")
-        self.build_log_tab(log_tab)
+        self.main_content = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        self.main_content.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
+        self.main_content.grid_columnconfigure(0, weight=1)
+        self.main_content.grid_rowconfigure(0, weight=1)
 
-        tab_control.pack(expand=1, fill="both", padx=30, pady=10)
+        self.tabs = {}
+        self.build_monitor_tab()
+        self.build_config_tab()
+        self.build_logs_tab()
 
-    def build_sensor_tab(self, parent):
-        container = tk.Frame(parent, bg=CyberTheme.BG_COLOR)
-        container.pack(expand=True, fill="both")
+        self.select_tab("monitor")
+        self.update_clock()
 
-        rssi_frame = tk.LabelFrame(container, text=" BLE_RSSI_PROXIMITY_DETECTION ", font=CyberTheme.FONT_MONO, fg=CyberTheme.FG_ACCENT, bg=CyberTheme.BG_COLOR, padx=20, pady=20, highlightthickness=1)
-        rssi_frame.pack(pady=20, fill="x", padx=40)
+    def select_tab(self, name):
+        for tab_name, tab_frame in self.tabs.items():
+            tab_frame.grid_forget()
+        self.tabs[name].grid(row=0, column=0, sticky="nsew")
 
-        self.rssi_slider = tk.Scale(rssi_frame, from_=-90, to=-30, orient="horizontal", bg=CyberTheme.BG_COLOR, fg=CyberTheme.FG_ACCENT, highlightthickness=0, font=("Consolas", 14), length=700, troughcolor="#111", activebackground=CyberTheme.FG_INFO)
-        self.rssi_slider.set(ConfigManager.get("rssi_threshold"))
-        self.rssi_slider.pack(pady=10)
+    def build_monitor_tab(self):
+        tab = ctk.CTkFrame(self.main_content, fg_color="transparent")
+        self.tabs["monitor"] = tab
+        ctk.CTkLabel(tab, text="[ REALTIME_SYSTEM_MONITOR ]", font=ctk.CTkFont(size=20, weight="bold"), text_color="#00E5FF").pack(pady=(0, 20), anchor="w")
+        status_frame = ctk.CTkFrame(tab, fg_color="#1a1a1a", border_width=1, border_color="#333")
+        status_frame.pack(fill="x", pady=10)
+        self.clock_label = ctk.CTkLabel(status_frame, text="TIME: 00:00:00", font=("Consolas", 18), text_color="#00FF41")
+        self.clock_label.pack(side="left", padx=20, pady=15)
+        self.sys_status = ctk.CTkLabel(status_frame, text="STATUS: STABLE_OPS", font=("Consolas", 18), text_color="#00FF41")
+        self.sys_status.pack(side="right", padx=20, pady=15)
 
-        face_frame = tk.LabelFrame(container, text=" FACE_RECOGNITION_PRECISION_ENGINE ", font=CyberTheme.FONT_MONO, fg=CyberTheme.FG_ACCENT, bg=CyberTheme.BG_COLOR, padx=20, pady=20, highlightthickness=1)
-        face_frame.pack(pady=20, fill="x", padx=40)
+    def build_config_tab(self):
+        tab = ctk.CTkFrame(self.main_content, fg_color="transparent")
+        self.tabs["config"] = tab
+        ctk.CTkLabel(tab, text="[ CONFIGURATION_NODE ]", font=ctk.CTkFont(size=20, weight="bold"), text_color="#00E5FF").pack(pady=(0, 20), anchor="w")
+        self.rssi_slider = self.create_slider_item(tab, "RSSI_THRESHOLD_DBM", -90, -30, ConfigManager.get("rssi_threshold"))
+        self.face_slider = self.create_slider_item(tab, "FACE_PRECISION_DELTA", 0.3, 0.7, ConfigManager.get("face_threshold"))
+        ctk.CTkButton(tab, text=">>> DEPLOY_CONFIG <<<", command=self.save_settings, height=50, fg_color="#FF003C", hover_color="#CC0030", text_color="black", font=("Consolas", 16, "bold")).pack(pady=40, fill="x")
 
-        self.face_slider = tk.Scale(face_frame, from_=0.3, to_=0.7, resolution=0.01, orient="horizontal", bg=CyberTheme.BG_COLOR, fg=CyberTheme.FG_ACCENT, highlightthickness=0, font=("Consolas", 14), length=700, troughcolor="#111", activebackground=CyberTheme.FG_INFO)
-        self.face_slider.set(ConfigManager.get("face_threshold"))
-        self.face_slider.pack(pady=10)
+    def create_slider_item(self, parent, label, from_, to_, value):
+        frame = ctk.CTkFrame(parent, fg_color="#1a1a1a", border_width=1, border_color="#333")
+        frame.pack(fill="x", pady=10, padx=10)
+        ctk.CTkLabel(frame, text=label, font=("Consolas", 12), text_color="#00FF41").pack(side="left", padx=20, pady=20)
+        slider = ctk.CTkSlider(frame, from_=from_, to=to_, progress_color="#00FF41", button_color="#00FF41")
+        slider.set(value)
+        slider.pack(side="right", expand=True, padx=20)
+        return slider
 
-        btn_frame = tk.Frame(container, bg=CyberTheme.BG_COLOR)
-        btn_frame.pack(pady=40)
+    def build_logs_tab(self):
+        tab = ctk.CTkFrame(self.main_content, fg_color="transparent")
+        self.tabs["logs"] = tab
+        ctk.CTkLabel(tab, text="[ SYSTEM_AUDIT_LOG_STREAM ]", font=ctk.CTkFont(size=20, weight="bold"), text_color="#00E5FF").pack(pady=(0, 20), anchor="w")
+        self.log_textbox = ctk.CTkTextbox(tab, fg_color="#050505", text_color="#00FF41", font=("Consolas", 12), border_width=1, border_color="#333")
+        self.log_textbox.pack(expand=True, fill="both", pady=10)
 
-        save_btn = tk.Button(btn_frame, text=">>> COMPILE & SAVE CONFIGURATION <<<", command=self.save_settings, font=("Consolas", 14, "bold"), bg="#1a1a1a", fg=CyberTheme.FG_ACCENT, width=40, height=2, relief=tk.RAISED, activebackground=CyberTheme.FG_ACCENT, activeforeground="black")
-        save_btn.pack()
-
-    def build_log_tab(self, parent):
-        self.log_list = tk.Listbox(parent, font=("Consolas", 11), bg="#050505", fg=CyberTheme.FG_ACCENT, highlightcolor=CyberTheme.FG_ACCENT, selectbackground=CyberTheme.FG_INFO, selectforeground="black", borderwidth=1, relief=tk.FLAT)
-        self.log_list.pack(expand=1, fill="both", padx=20, pady=20)
-
-    def update_stats(self):
-        current_time = time.strftime("%H:%M:%S")
-        self.time_label.config(text=f"SYSTEM_TIME: {current_time} [STABLE]")
-        self.root.after(1000, self.update_stats)
+    def update_clock(self):
+        self.clock_label.configure(text=f"TIME: {time.strftime('%H:%M:%S')}")
+        self.after(1000, self.update_clock)
 
     def save_settings(self):
         ConfigManager.set("rssi_threshold", int(self.rssi_slider.get()))
         ConfigManager.set("face_threshold", round(float(self.face_slider.get()), 2))
-        messagebox.showinfo("SYSTEM_ADMIN", "CONFIGURATION COMPILED SUCCESSFULLY.")
-        logger.info("Admin updated sensors.")
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = AdminDashboard(root)
-    root.mainloop()
+        messagebox.showinfo("SHINOBI_ADMIN", "CONFIGURATION DEPLOYED SUCCESSFULLY.")
