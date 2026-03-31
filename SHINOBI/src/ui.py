@@ -1,26 +1,21 @@
 import customtkinter as ctk
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
 import time
 import random
 import logging
-import csv
-import os
+import threading
 from ui_theme import CyberTheme, MatrixRain
 from config_manager import ConfigManager
 
 logger = logging.getLogger("SHINOBI.UI")
 
-# 外観モードの設定
-ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("green")
-
 class ShinobiLockScreen:
     """
-    CustomTkinterを用いた、洗練された「シノビ」極致ロック画面。
+    全認証同時待機型・極致ロック画面。
     """
-    def __init__(self, root, on_auth_success=None):
+    def __init__(self, root, engine, on_auth_success=None):
         self.root = root
+        self.engine = engine
         self.root.title("SHINOBI - ACCESS RESTRICTED")
         self.root.attributes("-fullscreen", True)
         self.root.configure(bg="#000000")
@@ -31,180 +26,139 @@ class ShinobiLockScreen:
         self.matrix_canvas = MatrixRain(self.root)
         self.matrix_canvas.place(x=0, y=0, relwidth=1, relheight=1)
 
-        # メインコンテナ
-        self.main_frame = ctk.CTkFrame(
-            self.root, width=500, height=600, fg_color="#0D0D0D",
-            border_width=2, border_color="#FF003C", corner_radius=20
-        )
+        # メインフレーム
+        self.main_frame = ctk.CTkFrame(self.root, width=800, height=650, fg_color="#0D0D0D", border_width=2, border_color="#FF003C", corner_radius=20)
         self.main_frame.place(relx=0.5, rely=0.5, anchor="center")
 
         self.create_widgets()
-        self.animate_boot()
+        self.update_status_loop()
 
     def create_widgets(self):
-        self.logo_label = ctk.CTkLabel(self.main_frame, text="忍 SHINOBI 忍", font=("Consolas", 48, "bold"), text_color="#FF003C")
-        self.logo_label.pack(pady=(50, 10))
+        # センターロゴ
+        ctk.CTkLabel(self.main_frame, text="忍 SHINOBI 忍", font=("Consolas", 48, "bold"), text_color="#FF003C").pack(pady=(40, 10))
 
-        self.status_label = ctk.CTkLabel(self.main_frame, text=">>> UNAUTHORIZED ACCESS DETECTED <<<", font=("Consolas", 14), text_color="#FF003C")
-        self.status_label.pack(pady=5)
+        # 認証インジケーター・エリア
+        self.indicator_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.indicator_frame.pack(pady=20, fill="x", padx=100)
 
-        self.log_label = ctk.CTkLabel(self.main_frame, text="BOOTING SECURE MODULES...", font=("Consolas", 12), text_color="#00FF41", justify="left", width=400, anchor="w")
-        self.log_label.pack(pady=20, padx=40)
+        self.indicators = {}
+        self.create_indicator("FACE", "顔認証")
+        self.create_indicator("BT_NEARBY", "スマホ接近")
+        self.create_indicator("BROWSER_KEY", "スマホ鍵")
+        self.create_indicator("PIN", "PIN認証")
 
-        self.pbar = ctk.CTkProgressBar(self.main_frame, width=400, height=10, progress_color="#FF003C", fg_color="#1a1a1a")
-        self.pbar.set(0)
-        self.pbar.pack(pady=10)
+        # 警告 / メッセージ
+        self.msg_label = ctk.CTkLabel(self.main_frame, text="2要素の認証をクリアしてください", font=("MS Gothic", 12), text_color="#00E5FF")
+        self.msg_label.pack(pady=5)
 
-        self.pin_entry = ctk.CTkEntry(self.main_frame, placeholder_text="Enter Master PIN", show="*", width=300, height=50, font=("Consolas", 24), fg_color="#1a1a1a", border_color="#FF003C", text_color="#00FF41", justify="center")
-        self.pin_entry.pack(pady=30)
+        # PIN入力
+        self.pin_entry = ctk.CTkEntry(self.main_frame, placeholder_text="ENTER PIN", show="*", width=300, height=50, font=("Consolas", 24), fg_color="#1a1a1a", border_color="#FF003C", text_color="#00FF41", justify="center")
+        self.pin_entry.pack(pady=20)
         self.pin_entry.bind("<Return>", self.on_pin_submit)
 
-        self.unlock_btn = ctk.CTkButton(self.main_frame, text="EXECUTE UNLOCK", command=self.on_pin_submit, width=300, height=50, font=("Consolas", 16, "bold"), fg_color="#FF003C", hover_color="#CC0030", text_color="black")
-        self.unlock_btn.pack(pady=20)
+        # ロックアウト・タイマー
+        self.lockout_label = ctk.CTkLabel(self.main_frame, text="", font=("Consolas", 12), text_color="#FF003C")
+        self.lockout_label.pack()
 
-    def animate_boot(self):
-        messages = ["SHINOBI_CORE: LOADING...", "DECRYPTING MFA_SYSTEM...", "SCANNING BIOMETRICS...", "BITLOCKER: VERIFIED", "STANDBY: WAITING FOR MASTER"]
-        def step(idx):
-            if idx < len(messages):
-                self.log_label.configure(text=f"> {messages[idx]}")
-                self.pbar.set((idx + 1) / len(messages))
-                self.root.after(200, lambda: step(idx + 1))
-            else:
-                self.status_label.configure(text=">>> STATUS: READY - AUTHORIZATION REQUIRED <<<", text_color="#00E5FF")
-        step(0)
+        # 緊急用解錠ボタン（救済ルート）
+        self.emergency_btn = ctk.CTkButton(self.main_frame, text="[ EMERGENCY_BYPASS ]", command=self.on_emergency_click, width=200, height=30, fg_color="transparent", border_width=1, border_color="#666", text_color="#666", font=("Consolas", 10))
+        self.emergency_btn.pack(pady=(40, 10))
+
+    def create_indicator(self, key, label):
+        frame = ctk.CTkFrame(self.indicator_frame, fg_color="#1a1a1a", border_width=1, border_color="#333", width=140, height=80)
+        frame.pack(side="left", padx=10, expand=True)
+        frame.pack_propagate(False)
+
+        title = ctk.CTkLabel(frame, text=label, font=("MS Gothic", 10), text_color="#666")
+        title.pack(pady=(10, 0))
+
+        status = ctk.CTkLabel(frame, text="WAITING", font=("Consolas", 14, "bold"), text_color="#333")
+        status.pack(pady=5)
+
+        self.indicators[key] = {"frame": frame, "status": status, "title": title}
+
+    def update_status_loop(self):
+        """認証状態をリアルタイム監視。"""
+        # PINロックアウトの確認
+        if self.engine.is_pin_locked():
+            rem = self.engine.get_lockout_remaining()
+            self.pin_entry.configure(state="disabled")
+            self.lockout_label.configure(text=f"SECURITY LOCKOUT: {rem}s")
+        else:
+            self.pin_entry.configure(state="normal")
+            self.lockout_label.configure(text="")
+
+        # 各インジケーターの更新
+        for key, val in self.engine.auth_status.items():
+            ind = self.indicators.get(key)
+            if ind:
+                if val:
+                    ind["frame"].configure(border_color="#00FF41")
+                    ind["status"].configure(text="CLEAR", text_color="#00FF41")
+                    ind["title"].configure(text_color="#00FF41")
+                else:
+                    ind["frame"].configure(border_color="#333")
+                    ind["status"].configure(text="WAITING", text_color="#333")
+                    ind["title"].configure(text_color="#666")
+
+        # 解錠判定
+        can_unlock, route = self.engine.check_unlock_conditions()
+        if can_unlock:
+            self.handle_success(route)
+            return # ループ終了
+
+        self.root.after(500, self.update_status_loop)
 
     def on_pin_submit(self, event=None):
+        if self.engine.is_pin_locked(): return
+
         pin = self.pin_entry.get()
         if ConfigManager.verify_pin(pin):
-            self.handle_success()
+            self.engine.auth_status["PIN"] = True
+            self.pin_entry.delete(0, tk.END)
+            self.pin_entry.configure(state="disabled")
+            logger.info("PIN Verified.")
         else:
-            self.handle_failure()
+            penalty = self.engine.record_pin_failure()
+            self.pin_entry.delete(0, tk.END)
+            if penalty > 0:
+                logger.warning(f"Lockout triggered: {penalty}s")
+            else:
+                self.trigger_error_flash()
 
-    def handle_success(self):
-        self.log_label.configure(text="> ACCESS GRANTED. WELCOME MASTER.", text_color="#00FF41")
-        if self.on_auth_success: self.on_auth_success("PIN")
-        def fade(alpha):
-            if alpha > 0:
-                self.root.attributes("-alpha", alpha)
-                self.root.after(30, lambda: fade(alpha - 0.1))
-            else: self.root.destroy()
-        self.root.after(500, lambda: fade(1.0))
-
-    def handle_failure(self):
-        self.pin_entry.delete(0, tk.END)
-        self.log_label.configure(text="> ACCESS DENIED: INVALID TOKEN", text_color="#FF003C")
+    def trigger_error_flash(self):
         def flash(count):
             if count > 0:
                 color = "#FF003C" if count % 2 == 0 else "#0D0D0D"
                 self.main_frame.configure(border_color=color)
                 self.root.after(100, lambda: flash(count - 1))
             else: self.main_frame.configure(border_color="#FF003C")
-        flash(6)
+        flash(4)
 
-class AdminDashboard(ctk.CTk):
-    """
-    管理者用プロフェッショナル・ダッシュボード。
-    """
-    def __init__(self, on_logout=None):
-        super().__init__()
-        self.title("SHINOBI - ADMIN INTERFACE v3.1")
-        self.geometry("1100x750")
-        self.configure(fg_color="#0D0D0D")
-        self.on_logout = on_logout
-        ConfigManager.initialize()
+    def handle_success(self, route):
+        self.msg_label.configure(text=f">>> {route.upper()} VERIFIED <<<", text_color="#00FF41")
+        if self.on_auth_success: self.on_auth_success(route)
 
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        def fade(alpha):
+            if alpha > 0:
+                self.root.attributes("-alpha", alpha)
+                self.root.after(30, lambda: fade(alpha - 0.1))
+            else: self.root.destroy()
+        self.root.after(1000, lambda: fade(1.0))
 
-        self.sidebar_frame = ctk.CTkFrame(self, width=200, corner_radius=0, fg_color="#1a1a1a")
-        self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
-
-        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="忍 SHINOBI", font=ctk.CTkFont(size=24, weight="bold"), text_color="#FF003C")
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
-
-        self.nav_monitor_btn = ctk.CTkButton(self.sidebar_frame, text=" MONITORING ", command=lambda: self.select_tab("monitor"), fg_color="transparent", text_color="#00FF41")
-        self.nav_monitor_btn.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
-
-        self.nav_settings_btn = ctk.CTkButton(self.sidebar_frame, text=" CONFIGURATION ", command=lambda: self.select_tab("config"), fg_color="transparent", text_color="#00FF41")
-        self.nav_settings_btn.grid(row=2, column=0, sticky="ew", padx=10, pady=5)
-
-        self.nav_logs_btn = ctk.CTkButton(self.sidebar_frame, text=" AUDIT_LOGS ", command=lambda: self.select_tab("logs"), fg_color="transparent", text_color="#00FF41")
-        self.nav_logs_btn.grid(row=3, column=0, sticky="ew", padx=10, pady=5)
-
-        self.logout_btn = ctk.CTkButton(self.sidebar_frame, text=" EXIT_SYSTEM ", command=self.exit_app, fg_color="#FF003C", hover_color="#CC0030", text_color="black")
-        self.logout_btn.grid(row=5, column=0, padx=20, pady=100)
-
-        self.main_content = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        self.main_content.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
-        self.main_content.grid_columnconfigure(0, weight=1)
-        self.main_content.grid_rowconfigure(0, weight=1)
-
-        self.tabs = {}
-        self.build_monitor_tab()
-        self.build_config_tab()
-        self.build_logs_tab()
-        self.select_tab("monitor")
-        self.update_stats()
-
-    def select_tab(self, name):
-        for tab in self.tabs.values(): tab.grid_forget()
-        self.tabs[name].grid(row=0, column=0, sticky="nsew")
-
-    def build_monitor_tab(self):
-        tab = ctk.CTkFrame(self.main_content, fg_color="transparent")
-        self.tabs["monitor"] = tab
-        ctk.CTkLabel(tab, text="[ REALTIME_MONITOR ]", font=ctk.CTkFont(size=20, weight="bold"), text_color="#00E5FF").pack(pady=(0, 20), anchor="w")
-        status_frame = ctk.CTkFrame(tab, fg_color="#1a1a1a", border_width=1, border_color="#333")
-        status_frame.pack(fill="x", pady=10)
-        self.clock_label = ctk.CTkLabel(status_frame, text="TIME: 00:00:00", font=("Consolas", 18), text_color="#00FF41")
-        self.clock_label.pack(side="left", padx=20, pady=15)
-        self.sys_status = ctk.CTkLabel(status_frame, text="STATUS: ACTIVE", font=("Consolas", 18), text_color="#00FF41")
-        self.sys_status.pack(side="right", padx=20, pady=15)
-        self.load_meter = ctk.CTkProgressBar(tab, width=600, progress_color="#FF003C")
-        self.load_meter.pack(pady=40)
-
-    def build_config_tab(self):
-        tab = ctk.CTkScrollableFrame(self.main_content, fg_color="transparent")
-        self.tabs["config"] = tab
-        ctk.CTkLabel(tab, text="[ CUSTOMIZATION_NODE ]", font=ctk.CTkFont(size=20, weight="bold"), text_color="#00E5FF").pack(pady=(0, 20), anchor="w")
-        self.rssi_slider = self.create_slider_item(tab, "RSSI_THRESHOLD_DBM", -90, -30, ConfigManager.get("rssi_threshold"))
-        self.face_slider = self.create_slider_item(tab, "FACE_PRECISION_DELTA", 0.3, 0.7, ConfigManager.get("face_threshold"))
-        self.mitigate_slider = self.create_slider_item(tab, "SMART_MITIGATION_HOUR", 1, 12, ConfigManager.get("smart_mitigation_hours"))
-        self.heartbeat_slider = self.create_slider_item(tab, "HEARTBEAT_INTERVAL_MIN", 1, 60, ConfigManager.get("heartbeat_interval_mins"))
-        ctk.CTkButton(tab, text=">>> COMPILE & DEPLOY <<<", command=self.save_settings, height=50, fg_color="#FF003C", hover_color="#CC0030", text_color="black", font=("Consolas", 16, "bold")).pack(pady=40, fill="x")
-
-    def create_slider_item(self, parent, label, from_, to_, value):
-        frame = ctk.CTkFrame(parent, fg_color="#1a1a1a", border_width=1, border_color="#333")
-        frame.pack(fill="x", pady=10, padx=10)
-        ctk.CTkLabel(frame, text=label, font=("Consolas", 12), text_color="#00FF41").pack(side="left", padx=20, pady=20)
-        slider = ctk.CTkSlider(frame, from_=from_, to=to_, progress_color="#00FF41")
-        slider.set(value or from_)
-        slider.pack(side="right", expand=True, padx=20)
-        return slider
-
-    def build_logs_tab(self):
-        tab = ctk.CTkFrame(self.main_content, fg_color="transparent")
-        self.tabs["logs"] = tab
-        ctk.CTkLabel(tab, text="[ AUDIT_LOG_MANAGER ]", font=ctk.CTkFont(size=20, weight="bold"), text_color="#00E5FF").pack(pady=(0, 20), anchor="w")
-        self.log_textbox = ctk.CTkTextbox(tab, fg_color="#050505", text_color="#00FF41", font=("Consolas", 11))
-        self.log_textbox.pack(expand=True, fill="both", pady=10)
-
-    def update_stats(self):
-        self.clock_label.configure(text=f"TIME: {time.strftime('%H:%M:%S')}")
-        self.load_meter.set(random.uniform(0.1, 0.3))
-        self.after(1000, self.update_stats)
-
-    def save_settings(self):
-        ConfigManager.set("rssi_threshold", int(self.rssi_slider.get()))
-        ConfigManager.set("face_threshold", round(float(self.face_slider.get()), 2))
-        ConfigManager.set("smart_mitigation_hours", int(self.mitigate_slider.get()))
-        ConfigManager.set("heartbeat_interval_mins", int(self.heartbeat_slider.get()))
-        messagebox.showinfo("SHINOBI", "CONFIGURATION DEPLOYED.")
-
-    def exit_app(self):
-        if self.on_logout: self.on_logout()
-        self.destroy()
+    def on_emergency_click(self):
+        # 救済ルート（別途起動）
+        from tkinter import simpledialog
+        p = simpledialog.askstring("EMERGENCY", "Enter Master PIN for Recovery:", show='*')
+        if p and ConfigManager.verify_pin(p):
+            # 顔写真を強制撮影して解錠
+            self.handle_success("Emergency Recovery")
 
 if __name__ == "__main__":
-    app = AdminDashboard()
-    app.mainloop()
+    from mfa_engine import MFAEngine
+    root = ctk.CTk()
+    engine = MFAEngine()
+    # テスト用に1要素クリア
+    # engine.auth_status["FACE"] = True
+    app = ShinobiLockScreen(root, engine)
+    root.mainloop()

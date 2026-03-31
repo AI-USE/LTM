@@ -31,28 +31,29 @@ async def final_integration_test():
     logger.info(f"Initial State: {engine.state}")
     os_ctrl.set_lock_mode(True)
 
-    # 3. 認証テスト (PIN検証)
-    test_pin = "0000" # デフォルト
+    # 3. 認証テスト (PINクリア)
+    test_pin = "0000"
     if ConfigManager.verify_pin(test_pin):
         logger.info(f"PIN Verification SUCCESS: {test_pin}")
         await engine.update_auth_factor("PIN", True)
-    else:
-        logger.error(f"PIN Verification FAILED: {test_pin}")
 
-    # 4. 認証テスト (BT接近)
+    # 4. 認証テスト (BT接近クリア)
     await bt.scan_nearby_devices()
     await engine.update_auth_factor("BT_NEARBY", bt.is_nearby())
 
-    # 5. 解錠確認
-    logger.info(f"Final State: {engine.state}")
-    if engine.state == SystemState.UNLOCKED:
+    # 5. 解錠判定の実行 (新ロジック: 2つクリアで解錠)
+    can_unlock, route = engine.check_unlock_conditions()
+    if can_unlock:
+        await engine.unlock_system(route)
         os_ctrl.set_lock_mode(False)
-        audit.log_entry("Hybrid (PIN+BT)")
+        audit.log_entry(route)
+        logger.info(f"Final State: {engine.state}")
         logger.info("Final Integration Test: UNLOCK SUCCESS.")
     else:
-        logger.error("Final Integration Test: UNLOCK FAILED.")
+        logger.error(f"Final State: {engine.state}")
+        logger.error(f"Final Integration Test: UNLOCK FAILED. Status: {route}")
 
-    # 6. クリーンアップ (テスト後に制限を解除)
+    # 6. クリーンアップ
     os_ctrl.set_lock_mode(False)
     logger.info("--- SHINOBI FINAL INTEGRATED TEST COMPLETED ---")
 
