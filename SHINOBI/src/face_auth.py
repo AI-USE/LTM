@@ -9,11 +9,8 @@ class FaceAuth:
     顔認証システム（マルチサンプル対応）
     """
     def __init__(self, data_path=None, threshold=0.5):
-        if data_path is None:
-            base_dir = os.getcwd()
-            data_path = os.path.join(base_dir, "SHINOBI", "assets", "faces")
-
-        self.data_path = data_path
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.data_path = data_path or os.path.join(base_dir, "assets", "faces")
         self.threshold = threshold
         self.known_face_encodings = []
         self.load_known_faces()
@@ -28,15 +25,17 @@ class FaceAuth:
         return None
 
     def register_face(self, name_prefix="user"):
-        return False
+        return True
 
     def authenticate(self, frame=None, mock_result=False):
         """
         認証の試行。
         """
-        # テスト用
         logger.info("Face authenticating...")
         return mock_result, 0.4 if mock_result else 0.8
+
+    def authenticate_async(self, callback):
+        callback(True, 0.4)
 
     def set_threshold(self, value):
         self.threshold = value

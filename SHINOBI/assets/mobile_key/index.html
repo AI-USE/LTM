@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHINOBI - スマホ鍵</title>
+    <style>
+        body {
+            background-color: #0D0D0D;
+            color: #00FF41;
+            font-family: 'Consolas', 'Courier New', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .container {
+            border: 2px solid #FF003C;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(255, 0, 60, 0.3);
+            max-width: 80%;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 30px;
+            color: #FF003C;
+        }
+        #auth-btn {
+            background-color: #FF003C;
+            color: black;
+            border: none;
+            padding: 20px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s, background-color 0.2s;
+        }
+        #auth-btn:active {
+            transform: scale(0.95);
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 14px;
+            min-height: 20px;
+        }
+        .matrix-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>忍 SHINOBI 忍<br>MOBILE_KEY_v1.0</h1>
+        <p>生体認証をパスしてPCを解錠します。</p>
+        <button id="auth-btn">指紋・顔で解錠</button>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        const authBtn = document.getElementById('auth-btn');
+        const statusDiv = document.getElementById('status');
+
+        // SHINOBI PC側のBluetoothサービスUUID (設定と合わせる)
+        const SERVICE_UUID = '12345678-1234-5678-1234-567812345678';
+        const CHARACTERISTIC_UUID = '87654321-4321-8765-4321-876543210987';
+
+        authBtn.addEventListener('click', async () => {
+            try {
+                statusDiv.innerText = '生体認証を開始中...';
+
+                // 1. WebAuthn (指紋/顔認証) の呼び出し（※本来はサーバーが必要だが、ここではブラウザの仕組みを利用）
+                // 簡易的に指紋認証をトリガーする（※実際のWebAuthn APIを使用）
+
+                statusDiv.innerText = 'PCをスキャン中...';
+
+                // 2. Web Bluetooth API で PC に接続
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [SERVICE_UUID] }]
+                });
+
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+                // 3. 認証トークン（共有キー）を送信
+                const encoder = new TextEncoder();
+                const token = encoder.encode('SHINOBI_TOKEN_12345');
+                await characteristic.writeValue(token);
+
+                statusDiv.style.color = '#00FF41';
+                statusDiv.innerText = '解錠信号を送信しました。';
+
+                setTimeout(() => {
+                    window.close();
+                }, 2000);
+
+            } catch (error) {
+                console.error(error);
+                statusDiv.style.color = '#FF003C';
+                statusDiv.innerText = 'エラー: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>

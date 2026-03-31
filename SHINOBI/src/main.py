@@ -3,7 +3,7 @@ import sys
 import os
 import logging
 import threading
-import tkinter as tk
+import customtkinter as ctk
 
 # 実行ファイルからの相対パスを正確に解決
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,12 +20,16 @@ from ui import ShinobiLockScreen, AdminDashboard
 from audit_watchdog import AuditLog, Watchdog
 from keyboard_hook import KeyboardHook
 from config_manager import ConfigManager
+from setup_wizard import SetupWizard
 
 # ロギング設定
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger("SHINOBI.Main")
 
 class ShinobiApp:
+    """
+    SHINOBI 究極個人認証システム v3.1
+    """
     def __init__(self):
         ConfigManager.initialize()
         self.engine = MFAEngine()
@@ -38,7 +42,6 @@ class ShinobiApp:
         self.watchdog = Watchdog()
 
         self.root = None
-        self.lock_screen = None
         self.loop = asyncio.new_event_loop()
         self.async_thread = threading.Thread(target=self.run_async_loop, daemon=True)
 
@@ -48,7 +51,7 @@ class ShinobiApp:
 
     async def background_monitoring(self):
         """
-        BT監視、顔認証のトリガー、ハートビート等をバックグラウンドで実行。
+        Bluetooth 心拍監視 (Heartbeat) と背景スキャン。
         """
         while True:
             if self.engine.state != SystemState.UNLOCKED:
@@ -60,38 +63,54 @@ class ShinobiApp:
                 # match, dist = self.face.authenticate()
                 # await self.engine.update_auth_factor("FACE", match)
 
-            await asyncio.sleep(10)
+            # 設定された間隔（1〜60分）で監視
+            interval = ConfigManager.get("heartbeat_interval_mins") or 10
+            await asyncio.sleep(interval * 60)
 
     def on_auth_success(self, route):
-        logger.info(f"Access Granted: Route={route}")
+        logger.info(f"AUTHORIZED: Access granted via {route}")
         self.os_ctrl.set_lock_mode(False)
         self.kb_hook.stop()
+
+        # 監査ログの記録 (実際の顔写真をキャプチャ)
         self.audit.log_entry(route)
+
         # engineの状態を更新
         asyncio.run_coroutine_threadsafe(self.engine.unlock_system(route), self.loop)
 
-    def run(self):
-        logger.info("Initializing SHINOBI CORE System...")
+    def start_wizard(self):
+        """初回セットアップウィザードを起動。"""
+        wizard = SetupWizard(self.root, on_complete=self.launch_lock_screen)
+        wizard.grab_set()
 
-        # 1. 管理者権限とBitLocker状態の確認
+    def launch_lock_screen(self):
+        """ロック画面を表示。"""
+        self.lock_screen = ShinobiLockScreen(self.root, on_auth_success=self.on_auth_success)
+
+    def run(self):
+        logger.info("SHINOBI_CORE System v3.1 Starting...")
+
+        # 1. 権限とBitLocker確認
         if not is_admin():
-            logger.warning("ELEVATED PRIVILEGES REQUIRED for registry and hook operations.")
+            logger.warning("ELEVATED PRIVILEGES REQUIRED for full security features.")
         self.os_ctrl.check_bitlocker_status()
 
-        # 2. キーボードフック開始
+        # 2. フックと制限開始
         self.kb_hook.start()
-
-        # 3. レジストリ制限の有効化
         self.os_ctrl.set_lock_mode(True)
 
-        # 4. 非同期ループスレッド開始
+        # 3. 非同期ループ開始
         self.async_thread.start()
         asyncio.run_coroutine_threadsafe(self.background_monitoring(), self.loop)
-        asyncio.run_coroutine_threadsafe(self.engine.heartbeat_check(), self.loop)
 
-        # 5. Tkinter メインループ (ロック画面起動)
-        self.root = tk.Tk()
-        self.lock_screen = ShinobiLockScreen(self.root, on_auth_success=self.on_auth_success)
+        # 4. メインUI (Tkinter) 起動
+        self.root = ctk.CTk()
+
+        # 初回起動チェック
+        if not ConfigManager.get("setup_complete"):
+            self.root.after(100, self.start_wizard)
+        else:
+            self.root.after(100, self.launch_lock_screen)
 
         try:
             self.root.mainloop()
