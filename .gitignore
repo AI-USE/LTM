@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+SHINOBI/logs/audit.db
+SHINOBI/logs/audit/*.jpg
+SHINOBI/assets/faces/*.pkl
+.env
+dist/
+build/
+*.exe
