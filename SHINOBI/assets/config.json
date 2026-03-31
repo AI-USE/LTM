@@ -1,0 +1,9 @@
+{
+    "pin_hash": "9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0",
+    "rssi_threshold": -70,
+    "face_threshold": 0.5,
+    "target_mac": "00:00:00:00:00:00",
+    "smart_mitigation_hours": 1,
+    "heartbeat_interval_mins": 10,
+    "system_version": "3.0.0"
+}

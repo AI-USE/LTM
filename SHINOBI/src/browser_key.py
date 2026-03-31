@@ -8,67 +8,50 @@ logger = logging.getLogger("SHINOBI.BrowserKey")
 
 class BrowserKeyReceiver:
     """
-    スマホのブラウザ（Web Bluetooth API）から送信された認証トークンを受信する。
+    スマホのブラウザから送信されたトークンを受信し、MFAエンジンへ通知する。
     """
     def __init__(self, service_uuid=None):
-        # サービスUUIDを固定またはランダム生成
         self.service_uuid = service_uuid or "12345678-1234-5678-1234-567812345678"
         self.characteristic_uuid = "87654321-4321-8765-4321-876543210987"
-        self.received_token = None
         self.auth_success = False
 
-    async def start_advertising(self):
+    async def start_advertising(self, on_verified_callback):
         """
-        PC側でBluetoothのアドバタイズを開始し、スマホからの接続・書き込みを待機する。
-        (BleakGATTServerを使用することを想定)
+        PC側でGATTサーバーを稼働させ、スマホからの書き込みを待機。
         """
-        logger.info(f"BLE_SERVER ONLINE: Service={self.service_uuid}")
+        logger.info(f"BLE_SERVER ONLINE: {self.service_uuid}")
+        self.on_verified_callback = on_verified_callback
 
-        # WindowsのWinRTスタックを使用したGATTサーバーの実装（雛形）
-        # try:
-        #     from bleak.backends.winrt.server import BleakGATTServerWinRT
-        #     server = BleakGATTServerWinRT()
-        #     # サービスの定義
-        #     await server.add_new_service(self.service_uuid)
-        #     await server.add_new_characteristic(self.service_uuid, self.characteristic_uuid, ["write"], None)
-        #     # 書き込みイベントの購読
-        #     server.set_characteristic_write_callback(self.characteristic_uuid, self.on_token_received)
-        #     await server.start()
-        # except ImportError:
-        #     logger.warning("BLE Server not available on this platform.")
+        # 実際にはここに BleakGATTServer の稼働ループが入る
+        # self.server = BleakGATTServerWinRT(...)
+        # await self.server.start()
 
     def on_token_received(self, handle, data):
         """
-        GATT書き込みイベント（スマホからの解錠指示）のコールバック。
+        スマホからデータが届いた時の処理。
         """
         try:
-            token = data.decode('utf-8')
-            logger.info(f"Received Token: {token}")
-            self.received_token = token
-            return self.verify_token(token)
-        except Exception as e:
-            logger.error(f"Failed to process token data: {e}")
-            return False
+            received_token = data.decode('utf-8')
+            logger.info(f"Received Token from Mobile: {received_token}")
 
-    def verify_token(self, token):
-        """
-        トークンの検証ロジック。
-        """
-        # 実際には ConfigManager.get("browser_token_hash") と比較
-        # 今回は簡易的に静的キーとの比較
-        secret_key = "SHINOBI_TOKEN_12345"
-        if token == secret_key:
-            logger.info("Token Verification: SUCCESS")
-            self.auth_success = True
-            return True
-        else:
-            logger.warning("Token Verification: FAILED (Unauthorized Device)")
-            self.auth_success = False
+            # 保存されている現在のトークンと比較
+            stored_token = ConfigManager.get("browser_token")
+
+            if received_token == stored_token:
+                logger.info("Mobile Key Verification: SUCCESS")
+                self.auth_success = True
+                if self.on_verified_callback:
+                    self.on_verified_callback(True)
+                return True
+            else:
+                logger.warning("Mobile Key Verification: FAILED (Token Mismatch)")
+                self.auth_success = False
+                return False
+        except Exception as e:
+            logger.error(f"Error processing BLE data: {e}")
             return False
 
     async def simulate_receive(self, token):
-        """
-        テスト・デモ用モック。
-        """
-        logger.info(f"[SIMULATION] Received Token: {token}")
-        return self.verify_token(token)
+        """テスト用モック"""
+        logger.info(f"[SIMULATION] Mobile sending token: {token}")
+        return self.on_token_received(None, token.encode('utf-8'))

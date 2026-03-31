@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SHINOBI - スマホ鍵</title>
+    <title>SHINOBI - MOBILE_KEY</title>
     <style>
         body {
             background-color: #0D0D0D;
@@ -13,105 +13,125 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
-            overflow: hidden;
+            padding: 20px;
         }
-        .container {
-            border: 2px solid #FF003C;
-            padding: 40px;
-            border-radius: 20px;
+        .card {
+            border: 1px solid #FF003C;
+            padding: 30px;
+            border-radius: 15px;
             text-align: center;
-            box-shadow: 0 0 20px rgba(255, 0, 60, 0.3);
-            max-width: 80%;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 0 15px rgba(255, 0, 60, 0.2);
         }
-        h1 {
-            font-size: 24px;
-            margin-bottom: 30px;
-            color: #FF003C;
-        }
-        #auth-btn {
+        h1 { color: #FF003C; font-size: 20px; }
+        .btn {
             background-color: #FF003C;
             color: black;
             border: none;
-            padding: 20px 40px;
-            font-size: 18px;
+            padding: 15px 30px;
+            font-size: 16px;
             font-weight: bold;
-            border-radius: 10px;
+            border-radius: 8px;
             cursor: pointer;
-            transition: transform 0.2s, background-color 0.2s;
-        }
-        #auth-btn:active {
-            transform: scale(0.95);
-        }
-        #status {
-            margin-top: 20px;
-            font-size: 14px;
-            min-height: 20px;
-        }
-        .matrix-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
             width: 100%;
-            height: 100%;
-            z-index: -1;
-            opacity: 0.1;
+            margin-top: 20px;
+        }
+        .btn:disabled { background-color: #333; color: #666; }
+        #status { margin-top: 20px; font-size: 12px; color: #00E5FF; }
+        input {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #00FF41;
+            padding: 10px;
+            width: 90%;
+            margin-top: 10px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>忍 SHINOBI 忍<br>MOBILE_KEY_v1.0</h1>
-        <p>生体認証をパスしてPCを解錠します。</p>
-        <button id="auth-btn">指紋・顔で解錠</button>
+    <div class="card">
+        <h1>忍 SHINOBI 忍<br>MOBILE_KEY_v3.3</h1>
+
+        <div id="setup-area">
+            <p>QRコードの設定を貼り付けるか、手動入力してください。</p>
+            <input type="text" id="config-input" placeholder='{"u": "...", "c": "...", "t": "..."}'>
+            <button class="btn" onclick="saveConfig()">設定を保存</button>
+        </div>
+
+        <div id="auth-area" style="display: none;">
+            <p>認証準備完了</p>
+            <button class="btn" id="unlock-btn">PCを解錠する</button>
+            <button class="btn" style="background: #333; color: #aaa; font-size: 12px;" onclick="resetConfig()">設定リセット</button>
+        </div>
+
         <div id="status"></div>
     </div>
 
     <script>
-        const authBtn = document.getElementById('auth-btn');
-        const statusDiv = document.getElementById('status');
+        let shinobiConfig = null;
 
-        // SHINOBI PC側のBluetoothサービスUUID (設定と合わせる)
-        const SERVICE_UUID = '12345678-1234-5678-1234-567812345678';
-        const CHARACTERISTIC_UUID = '87654321-4321-8765-4321-876543210987';
-
-        authBtn.addEventListener('click', async () => {
+        function saveConfig() {
+            const input = document.getElementById('config-input').value;
             try {
-                statusDiv.innerText = '生体認証を開始中...';
+                shinobiConfig = JSON.parse(input);
+                localStorage.setItem('shinobi_config', input);
+                showAuth();
+                log('設定を保存しました。');
+            } catch(e) {
+                alert('JSON形式が正しくありません。');
+            }
+        }
 
-                // 1. WebAuthn (指紋/顔認証) の呼び出し（※本来はサーバーが必要だが、ここではブラウザの仕組みを利用）
-                // 簡易的に指紋認証をトリガーする（※実際のWebAuthn APIを使用）
+        function loadConfig() {
+            const saved = localStorage.getItem('shinobi_config');
+            if (saved) {
+                shinobiConfig = JSON.parse(saved);
+                showAuth();
+            }
+        }
 
-                statusDiv.innerText = 'PCをスキャン中...';
+        function showAuth() {
+            document.getElementById('setup-area').style.display = 'none';
+            document.getElementById('auth-area').style.display = 'block';
+        }
 
-                // 2. Web Bluetooth API で PC に接続
+        function resetConfig() {
+            localStorage.removeItem('shinobi_config');
+            location.reload();
+        }
+
+        function log(msg) {
+            document.getElementById('status').innerText = '> ' + msg;
+        }
+
+        document.getElementById('unlock-btn').addEventListener('click', async () => {
+            if (!shinobiConfig) return;
+
+            try {
+                log('PCを検索中...');
                 const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ services: [SERVICE_UUID] }]
+                    filters: [{ services: [shinobiConfig.u] }]
                 });
 
+                log('接続中...');
                 const server = await device.gatt.connect();
-                const service = await server.getPrimaryService(SERVICE_UUID);
-                const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+                const service = await server.getPrimaryService(shinobiConfig.u);
+                const char = await service.getCharacteristic(shinobiConfig.c);
 
-                // 3. 認証トークン（共有キー）を送信
-                const encoder = new TextEncoder();
-                const token = encoder.encode('SHINOBI_TOKEN_12345');
-                await characteristic.writeValue(token);
+                log('解錠信号を送信中...');
+                await char.writeValue(new TextEncoder().encode(shinobiConfig.t));
 
-                statusDiv.style.color = '#00FF41';
-                statusDiv.innerText = '解錠信号を送信しました。';
-
-                setTimeout(() => {
-                    window.close();
-                }, 2000);
-
+                log('解錠成功！');
             } catch (error) {
-                console.error(error);
-                statusDiv.style.color = '#FF003C';
-                statusDiv.innerText = 'エラー: ' + error.message;
+                log('エラー: ' + error.message);
             }
         });
+
+        window.onload = loadConfig;
     </script>
 </body>
 </html>
