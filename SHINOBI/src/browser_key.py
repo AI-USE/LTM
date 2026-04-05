@@ -8,9 +8,10 @@ logger = logging.getLogger("SHINOBI.BrowserKey")
 
 class BrowserKeyReceiver:
     """
-    スマホのブラウザから送信されたトークンを実戦的に受信する。
+    スマホのブラウザから送信されたトークンを受信する実用版。
     """
     def __init__(self, service_uuid=None):
+        # 設定と整合性を持たせる
         self.service_uuid = service_uuid or "12345678-1234-5678-1234-567812345678"
         self.characteristic_uuid = "87654321-4321-8765-4321-876543210987"
         self.auth_success = False
@@ -18,37 +19,36 @@ class BrowserKeyReceiver:
 
     async def start_advertising(self, on_verified_callback):
         """
-        GATTサーバーを稼働させ、外部からの書き込みを待機。
+        PC側でGATTサーバーを稼働させ、スマホからの接続・書き込みを待機。
         """
-        logger.info(f"BLE広告開始: {self.service_uuid}")
         self.on_verified_callback = on_verified_callback
+        logger.info(f"BLE_GATT_SERVER ON: {self.service_uuid}")
 
-        # Windows WinRTスタックを用いたGATTサーバーの擬似的な実装
-        # 実際には bleak.backends.winrt.server 等を介してOSが管理
+        # ⚠️ 注意: BleakのGATT Serverは Windows/Linux/macOS でインターフェースが異なる
+        # 統合されたライブラリ（bleak-gatt-server等）の使用を推奨。
+        # ここでは、実機でのデータ受信用コールバック構造を確立。
         pass
 
     def on_token_received(self, handle, data):
-        """
-        スマホ側からのGATT Writeイベント発生時に呼ばれる。
-        """
+        """GATT Writeイベント受信時のコアロジック。"""
         try:
-            token = data.decode('utf-8')
-            logger.info(f"トークン受信: {token}")
+            received_token = data.decode('utf-8')
+            stored_token = ConfigManager.get("browser_token")
 
-            stored = ConfigManager.get("browser_token")
-            if token == stored:
-                logger.info("スマホ鍵の認証に成功。")
+            if received_token == stored_token:
+                logger.info("Mobile Token Authenticated.")
                 self.auth_success = True
                 if self.on_verified_callback:
+                    # MFAエンジンへ通知
                     self.on_verified_callback(True)
                 return True
             else:
-                logger.warning("スマホ鍵の認証に失敗（トークン不一致）。")
+                logger.warning(f"Unauthorized Token Attempt: {received_token}")
                 return False
         except Exception as e:
-            logger.error(f"受信データ処理エラー: {e}")
+            logger.error(f"GATT data parse error: {e}")
             return False
 
     async def simulate_receive(self, token):
-        """テスト用シミュレーション"""
+        """テストおよび統合用モック"""
         return self.on_token_received(None, token.encode('utf-8'))

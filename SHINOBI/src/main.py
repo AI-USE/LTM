@@ -5,7 +5,7 @@ import logging
 import threading
 import customtkinter as ctk
 
-# 正確なパス解決
+# 実行ファイルの位置に基づいた正確なパス解決
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
     BUNDLE_DIR = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(__file__)))
@@ -27,9 +27,9 @@ from keyboard_hook import KeyboardHook
 from config_manager import ConfigManager
 from setup_wizard import SetupWizard
 
-# ロギング設定
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
-logger = logging.getLogger("SHINOBI.Main")
+# 統合ロギング
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+logger = logging.getLogger("SHINOBI.Core")
 
 class ShinobiApp:
     def __init__(self):
@@ -52,35 +52,33 @@ class ShinobiApp:
         self.loop.run_forever()
 
     async def background_monitoring(self):
-        """
-        全認証要素を非同期に常時監視。
-        """
+        """全認証要素を並列監視。"""
         while True:
             if self.engine.state != SystemState.UNLOCKED:
-                # 1. BT接近監視
+                # 1. BT接近監視 (async)
                 await self.bt.scan_nearby_devices()
-                await self.engine.update_auth_factor("BT_NEARBY", self.bt.is_nearby())
+                asyncio.run_coroutine_threadsafe(self.engine.update_auth_factor("BT_NEARBY", self.bt.is_nearby()), self.loop)
 
-                # 2. 顔認証（非同期）
-                self.face.authenticate_async(self.on_face_match_result)
+                # 2. 顔認証監視 (非同期・重い処理)
+                self.face.authenticate_async(self.on_face_result)
 
             await asyncio.sleep(5)
 
-    def on_face_match_result(self, match, dist):
-        """顔認証の結果を受け取り、MFAエンジンへ。"""
+    def on_face_result(self, match, dist):
+        """顔認証のコールバック。"""
         if self.engine.state != SystemState.UNLOCKED:
-            # スレッドセーフに実行
             asyncio.run_coroutine_threadsafe(self.engine.update_auth_factor("FACE", match), self.loop)
 
-    def on_verified_token_callback(self, success):
-        """スマホ鍵の結果を受け取り、MFAエンジンへ。"""
+    def on_verified_token(self, success):
+        """スマホ鍵（BLE）のコールバック。"""
         if success and self.engine.state != SystemState.UNLOCKED:
             asyncio.run_coroutine_threadsafe(self.engine.update_auth_factor("BROWSER_KEY", True), self.loop)
 
     def on_auth_success(self, route):
-        logger.info(f"認証成功、解錠します: {route}")
+        logger.info(f"AUTHORIZED: Access granted via {route}")
         self.os_ctrl.set_lock_mode(False)
         self.kb_hook.stop()
+        # 成功写真を撮影・保存
         self.audit.log_entry(route)
         asyncio.run_coroutine_threadsafe(self.engine.unlock_system(route), self.loop)
 
@@ -92,16 +90,16 @@ class ShinobiApp:
         self.lock_screen = ShinobiLockScreen(self.root, self.engine, on_auth_success=self.on_auth_success)
 
     def run(self):
-        logger.info("SHINOBI 起動中...")
+        logger.info("SHINOBI PRO 起動シーケンス開始...")
         self.os_ctrl.check_bitlocker_status()
         self.kb_hook.start()
         self.os_ctrl.set_lock_mode(True)
 
         self.async_thread.start()
+        # 各種待機タスク開始
         asyncio.run_coroutine_threadsafe(self.background_monitoring(), self.loop)
         asyncio.run_coroutine_threadsafe(self.engine.heartbeat_check(), self.loop)
-        # スマホ鍵待機開始
-        asyncio.run_coroutine_threadsafe(self.browser_key.start_advertising(self.on_verified_token_callback), self.loop)
+        asyncio.run_coroutine_threadsafe(self.browser_key.start_advertising(self.on_verified_token), self.loop)
 
         self.root = ctk.CTk()
         if not ConfigManager.get("setup_complete"):
