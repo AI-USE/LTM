@@ -5,7 +5,7 @@ import logging
 logger = logging.getLogger("SHINOBI.FaceAuth")
 
 class FaceAuth:
-    """顔認証システム (テスト用モック)"""
+    """顔認証システム (テスト・統合用モック)"""
     def __init__(self, threshold=0.5):
         from config_manager import ConfigManager
         self.data_path = ConfigManager.FACES_DIR
@@ -13,7 +13,7 @@ class FaceAuth:
         self.known_face_encodings = []
 
     def load_known_faces(self): pass
-    def capture_frame(self): return None
+    def capture_safe(self): return None
     def register_face(self, name_prefix="user"): return True
     def authenticate(self, frame=None, mock_result=False):
         return mock_result, 0.4 if mock_result else 0.8

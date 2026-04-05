@@ -3,49 +3,51 @@ import time
 import subprocess
 import sys
 import logging
+import threading
 
-# ロギング設定
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
-logger = logging.getLogger("SHINOBI.Watchdog")
+# ロギング
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] Watchdog: %(message)s')
+logger = logging.getLogger("SHINOBI.DoubleGuard")
 
-class ShinobiWatchdog:
+class DoubleGuard:
     """
-    SHINOBI メインプロセスの死活監視。
+    相互監視プロセス (Double-Guard)。
+    メインプログラムが落ちた場合、0.5秒以内に再起動する。
     """
-    def __init__(self, main_process_path):
-        self.main_process_path = main_process_path
+    def __init__(self, target_path):
+        self.target_path = target_path
         self.process = None
 
-    def start_main(self):
-        """
-        メインプロセスを起動。
-        """
-        logger.info(f"Starting SHINOBI main process: {self.main_process_path}")
-        self.process = subprocess.Popen([sys.executable, self.main_process_path])
+    def launch_target(self):
+        logger.info(f"Launching protected target: {self.target_path}")
+        # GUIアプリとしてコンソールを表示せずに起動
+        if sys.platform == "win32":
+            self.process = subprocess.Popen([sys.executable, self.target_path], creationflags=subprocess.CREATE_NO_WINDOW)
+        else:
+            self.process = subprocess.Popen([sys.executable, self.target_path])
 
-    def monitor(self):
-        """
-        無限ループでプロセスを監視。死んだら即座に再起動。
-        """
-        self.start_main()
+    def monitor_loop(self):
+        self.launch_target()
         while True:
-            # プロセスが終了したかチェック
+            # プロセスの生存確認
             if self.process.poll() is not None:
-                logger.warning("SHINOBI main process TERMINATED. RESTARTING IN 0.5s...")
+                logger.error("Protected process TERMINATED unexpectedy!")
+                logger.info("Initiating RECOVERY sequence in 0.5s...")
                 time.sleep(0.5)
-                self.start_main()
-            time.sleep(1)
+                self.launch_target()
+            time.sleep(1) # CPU負荷を抑えるためのインターバル
 
 if __name__ == "__main__":
-    # このスクリプトは、単体で「監視役」として動作させる。
-    # 実機では EXE 化された監視プログラムとして実行することを想定。
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    main_path = os.path.join(base_dir, "main.py")
+    # このスクリプトは単独のEXE(shinobi_guard.exe等)としてビルドされる。
+    if len(sys.argv) < 2:
+        # デフォルトは同階層の main.py (開発時)
+        target = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
+    else:
+        target = sys.argv[1]
 
-    watchdog = ShinobiWatchdog(main_path)
+    guard = DoubleGuard(target)
     try:
-        watchdog.monitor()
+        guard.monitor_loop()
     except KeyboardInterrupt:
-        logger.info("Watchdog shutting down.")
-        if watchdog.process:
-            watchdog.process.terminate()
+        logger.info("Guard shutting down.")
+        if guard.process: guard.process.terminate()

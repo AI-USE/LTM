@@ -1,92 +1,97 @@
 import os
 import json
 import hashlib
-import logging
 import sys
+import shutil
+import logging
+from Crypto.Cipher import AES
+from Crypto.Util import Counter
 
-logger = logging.getLogger("SHINOBI.Config")
+logger = logging.getLogger("SHINOBI.SecureConfig")
 
 class ConfigManager:
     """
-    SHINOBI 構成管理モジュール (EXE対応版)。
+    SHINOBI v4.0 セキュア構成管理。
+    AES-256 暗号化による資産保護、自己修復、EXE対応。
     """
-    # 実行ファイルのディレクトリを取得（EXE化された場合も対応）
     if getattr(sys, 'frozen', False):
-        # EXEとして実行されている場合
         BASE_DIR = os.path.dirname(sys.executable)
     else:
-        # スクリプトとして実行されている場合
-        # SHINOBI/src/config_manager.py なので、2つ上がルート
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    # 書き込み可能なアセットパスの設定
     ASSETS_DIR = os.path.join(BASE_DIR, "assets")
     FACES_DIR = os.path.join(ASSETS_DIR, "faces")
     LOGS_DIR = os.path.join(BASE_DIR, "logs")
+    CONFIG_PATH = os.path.join(ASSETS_DIR, "secure_config.bin") # 暗号化バイナリ
+    BACKUP_PATH = os.path.join(ASSETS_DIR, "secure_config_backup.bin")
 
-    CONFIG_PATH = os.path.join(ASSETS_DIR, "config.json")
-    BACKUP_PATH = os.path.join(ASSETS_DIR, "config_backup.json")
-    AUDIT_DB_PATH = os.path.join(LOGS_DIR, "audit.db")
+    # 内部マスターキー（実運用ではマシン固有ID等から生成を推奨）
+    _MASTER_KEY = hashlib.sha256(b"SHINOBI_ULTIMATE_v4_AES_KEY").digest()
 
     @staticmethod
     def initialize():
-        # 必要なディレクトリを全て作成
-        for path in [ConfigManager.ASSETS_DIR, ConfigManager.FACES_DIR, ConfigManager.LOGS_DIR]:
-            if not os.path.exists(path):
-                os.makedirs(path, exist_ok=True)
+        os.makedirs(ConfigManager.ASSETS_DIR, exist_ok=True)
+        os.makedirs(ConfigManager.FACES_DIR, exist_ok=True)
+        os.makedirs(ConfigManager.LOGS_DIR, exist_ok=True)
 
-        # 設定ファイルの初期化または修復
         if not os.path.exists(ConfigManager.CONFIG_PATH):
             if os.path.exists(ConfigManager.BACKUP_PATH):
-                import shutil
                 shutil.copy2(ConfigManager.BACKUP_PATH, ConfigManager.CONFIG_PATH)
-                logger.info("Config restored from backup.")
             else:
-                default_config = {
+                # 初期デフォルト
+                default = {
                     "pin_hash": hashlib.sha256("0000".encode()).hexdigest(),
                     "rssi_threshold": -70,
                     "face_threshold": 0.5,
-                    "target_mac": "00:00:00:00:00:00",
+                    "setup_complete": False,
+                    "target_mac": "",
+                    "browser_token": "INIT",
                     "smart_mitigation_hours": 1,
                     "heartbeat_interval_mins": 10,
-                    "setup_complete": False,
-                    "browser_token": "DEFAULT",
-                    "system_version": "3.4.0"
+                    "reset_request_time": 0, # リセット申請時刻
+                    "theme": "Dark"
                 }
-                ConfigManager._write_config(default_config)
-                logger.info("Default config created.")
+                ConfigManager.save_all(default)
 
     @staticmethod
-    def get(key):
+    def _get_cipher():
+        return AES.new(ConfigManager._MASTER_KEY, AES.MODE_CTR, counter=Counter.new(128))
+
+    @staticmethod
+    def load_all():
         if not os.path.exists(ConfigManager.CONFIG_PATH):
             ConfigManager.initialize()
         try:
-            with open(ConfigManager.CONFIG_PATH, "r", encoding="utf-8") as f:
-                return json.load(f).get(key)
+            with open(ConfigManager.CONFIG_PATH, "rb") as f:
+                encrypted_data = f.read()
+            decrypted_data = ConfigManager._get_cipher().decrypt(encrypted_data)
+            return json.loads(decrypted_data.decode('utf-8'))
         except Exception as e:
-            logger.error(f"Read config error: {e}")
-            return None
+            logger.error(f"Config Load Error (Corrupted?): {e}")
+            return {}
+
+    @staticmethod
+    def save_all(config_dict):
+        try:
+            data_str = json.dumps(config_dict, ensure_ascii=False).encode('utf-8')
+            encrypted_data = ConfigManager._get_cipher().encrypt(data_str)
+            with open(ConfigManager.CONFIG_PATH, "wb") as f:
+                f.write(encrypted_data)
+            shutil.copy2(ConfigManager.CONFIG_PATH, ConfigManager.BACKUP_PATH)
+        except Exception as e:
+            logger.error(f"Config Save Error: {e}")
+
+    @staticmethod
+    def get(key):
+        return ConfigManager.load_all().get(key)
 
     @staticmethod
     def set(key, value):
-        try:
-            if not os.path.exists(ConfigManager.CONFIG_PATH):
-                ConfigManager.initialize()
-            with open(ConfigManager.CONFIG_PATH, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            config[key] = value
-            ConfigManager._write_config(config)
-            import shutil
-            shutil.copy2(ConfigManager.CONFIG_PATH, ConfigManager.BACKUP_PATH)
-        except Exception as e:
-            logger.error(f"Write config error: {e}")
-
-    @staticmethod
-    def _write_config(config):
-        with open(ConfigManager.CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
+        cfg = ConfigManager.load_all()
+        cfg[key] = value
+        ConfigManager.save_all(cfg)
 
     @staticmethod
     def verify_pin(pin):
-        stored_hash = ConfigManager.get("pin_hash")
-        return hashlib.sha256(pin.encode()).hexdigest() == stored_hash
+        stored = ConfigManager.get("pin_hash")
+        return hashlib.sha256(pin.encode()).hexdigest() == stored
