@@ -1,21 +1,23 @@
-# SHINOBI Ultimate Security System - Version 2.0 (Hacker Edition)
-# Python 3.10+ recommended
+# SHINOBI Ultimate v3.4 - Dependency List
+# Optimized for Windows 11 Pro
 
-# Core Computer Vision & Biometrics
+# Biometrics & Imaging
 opencv-python
 face-recognition
+face-recognition-models
 numpy
 pillow
 
-# Bluetooth & Networking
+# Connectivity & Tools
 bleak
+qrcode[pil]
+
+# UI & Modern Interface
+customtkinter
+darkdetect
 
 # Windows Integration
 pywin32
 
-# GUI & Effects
-# tkinter is standard
-# No extra libs needed for canvas effects
-
-# Build & EXE
+# Packaging
 pyinstaller

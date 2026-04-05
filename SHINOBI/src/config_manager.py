@@ -2,27 +2,38 @@ import os
 import json
 import hashlib
 import logging
+import sys
 
 logger = logging.getLogger("SHINOBI.Config")
 
 class ConfigManager:
     """
-    SHINOBI 構成管理モジュール。
-    設定の永続化、検証、自動バックアップを担当。
+    SHINOBI 構成管理モジュール (EXE対応版)。
     """
-    # カレントディレクトリ（実行ファイルのある場所）を基準にする
-    BASE_DIR = os.getcwd()
-    CONFIG_PATH = os.path.join(BASE_DIR, "SHINOBI", "assets", "config.json")
-    BACKUP_PATH = os.path.join(BASE_DIR, "SHINOBI", "assets", "config_backup.json")
+    # 実行ファイルのディレクトリを取得（EXE化された場合も対応）
+    if getattr(sys, 'frozen', False):
+        # EXEとして実行されている場合
+        BASE_DIR = os.path.dirname(sys.executable)
+    else:
+        # スクリプトとして実行されている場合
+        # SHINOBI/src/config_manager.py なので、2つ上がルート
+        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # 書き込み可能なアセットパスの設定
+    ASSETS_DIR = os.path.join(BASE_DIR, "assets")
+    FACES_DIR = os.path.join(ASSETS_DIR, "faces")
+    LOGS_DIR = os.path.join(BASE_DIR, "logs")
+
+    CONFIG_PATH = os.path.join(ASSETS_DIR, "config.json")
+    BACKUP_PATH = os.path.join(ASSETS_DIR, "config_backup.json")
+    AUDIT_DB_PATH = os.path.join(LOGS_DIR, "audit.db")
 
     @staticmethod
     def initialize():
-        # ディレクトリ作成
-        for path in [os.path.dirname(ConfigManager.CONFIG_PATH),
-                    os.path.join(ConfigManager.BASE_DIR, "SHINOBI", "assets", "faces"),
-                    os.path.join(ConfigManager.BASE_DIR, "SHINOBI", "logs", "audit")]:
+        # 必要なディレクトリを全て作成
+        for path in [ConfigManager.ASSETS_DIR, ConfigManager.FACES_DIR, ConfigManager.LOGS_DIR]:
             if not os.path.exists(path):
-                os.makedirs(path)
+                os.makedirs(path, exist_ok=True)
 
         # 設定ファイルの初期化または修復
         if not os.path.exists(ConfigManager.CONFIG_PATH):
@@ -38,7 +49,9 @@ class ConfigManager:
                     "target_mac": "00:00:00:00:00:00",
                     "smart_mitigation_hours": 1,
                     "heartbeat_interval_mins": 10,
-                    "system_version": "3.0.0"
+                    "setup_complete": False,
+                    "browser_token": "DEFAULT",
+                    "system_version": "3.4.0"
                 }
                 ConfigManager._write_config(default_config)
                 logger.info("Default config created.")
