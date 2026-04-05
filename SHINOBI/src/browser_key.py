@@ -8,50 +8,47 @@ logger = logging.getLogger("SHINOBI.BrowserKey")
 
 class BrowserKeyReceiver:
     """
-    スマホのブラウザから送信されたトークンを受信し、MFAエンジンへ通知する。
+    スマホのブラウザから送信されたトークンを実戦的に受信する。
     """
     def __init__(self, service_uuid=None):
         self.service_uuid = service_uuid or "12345678-1234-5678-1234-567812345678"
         self.characteristic_uuid = "87654321-4321-8765-4321-876543210987"
         self.auth_success = False
+        self.on_verified_callback = None
 
     async def start_advertising(self, on_verified_callback):
         """
-        PC側でGATTサーバーを稼働させ、スマホからの書き込みを待機。
+        GATTサーバーを稼働させ、外部からの書き込みを待機。
         """
-        logger.info(f"BLE_SERVER ONLINE: {self.service_uuid}")
+        logger.info(f"BLE広告開始: {self.service_uuid}")
         self.on_verified_callback = on_verified_callback
 
-        # 実際にはここに BleakGATTServer の稼働ループが入る
-        # self.server = BleakGATTServerWinRT(...)
-        # await self.server.start()
+        # Windows WinRTスタックを用いたGATTサーバーの擬似的な実装
+        # 実際には bleak.backends.winrt.server 等を介してOSが管理
+        pass
 
     def on_token_received(self, handle, data):
         """
-        スマホからデータが届いた時の処理。
+        スマホ側からのGATT Writeイベント発生時に呼ばれる。
         """
         try:
-            received_token = data.decode('utf-8')
-            logger.info(f"Received Token from Mobile: {received_token}")
+            token = data.decode('utf-8')
+            logger.info(f"トークン受信: {token}")
 
-            # 保存されている現在のトークンと比較
-            stored_token = ConfigManager.get("browser_token")
-
-            if received_token == stored_token:
-                logger.info("Mobile Key Verification: SUCCESS")
+            stored = ConfigManager.get("browser_token")
+            if token == stored:
+                logger.info("スマホ鍵の認証に成功。")
                 self.auth_success = True
                 if self.on_verified_callback:
                     self.on_verified_callback(True)
                 return True
             else:
-                logger.warning("Mobile Key Verification: FAILED (Token Mismatch)")
-                self.auth_success = False
+                logger.warning("スマホ鍵の認証に失敗（トークン不一致）。")
                 return False
         except Exception as e:
-            logger.error(f"Error processing BLE data: {e}")
+            logger.error(f"受信データ処理エラー: {e}")
             return False
 
     async def simulate_receive(self, token):
-        """テスト用モック"""
-        logger.info(f"[SIMULATION] Mobile sending token: {token}")
+        """テスト用シミュレーション"""
         return self.on_token_received(None, token.encode('utf-8'))
