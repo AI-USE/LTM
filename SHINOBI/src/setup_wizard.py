@@ -12,10 +12,16 @@ from PIL import Image, ImageTk
 import logging
 import sys
 
-from config_manager import ConfigManager
-from face_auth import FaceAuth
-from os_control import OSRegistryController, is_admin
-from bt_monitor import BluetoothMonitor
+try:
+    from config_manager import ConfigManager
+    from face_auth import FaceAuth
+    from os_control import OSRegistryController, is_admin
+    from bt_monitor import BluetoothMonitor
+except ImportError:
+    from .config_manager import ConfigManager
+    from .face_auth import FaceAuth
+    from .os_control import OSRegistryController, is_admin
+    from .bt_monitor import BluetoothMonitor
 
 logger = logging.getLogger("SHINOBI.Wizard")
 

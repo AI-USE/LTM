@@ -6,9 +6,14 @@ import random
 import logging
 import cv2
 import face_recognition
-from ui_theme import CyberTheme, MatrixRain
-from config_manager import ConfigManager
-from face_auth import FaceAuth
+try:
+    from ui_theme import CyberTheme, MatrixRain
+    from config_manager import ConfigManager
+    from face_auth import FaceAuth
+except ImportError:
+    from .ui_theme import CyberTheme, MatrixRain
+    from .config_manager import ConfigManager
+    from .face_auth import FaceAuth
 
 logger = logging.getLogger("SHINOBI.UI")
 

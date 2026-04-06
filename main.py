@@ -10,10 +10,8 @@ SRC_DIR = os.path.join(ROOT_DIR, "SHINOBI", "src")
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
-try:
-    from SHINOBI.src.main import ShinobiApp
-except ImportError:
-    from main import ShinobiApp # パス設定後
+# エントリーポイントとして SHINOBI パッケージ内部の main をロード
+from SHINOBI.src.main import ShinobiApp
 
 if __name__ == "__main__":
     ShinobiApp().run()
