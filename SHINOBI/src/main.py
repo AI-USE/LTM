@@ -6,12 +6,20 @@ import threading
 import subprocess
 import customtkinter as ctk
 
-# パス解決
+# パス解決: SHINOBI/src 自身をパスに追加し、siblings を名前のみで import 可能にする
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
-from config_manager import ConfigManager
+# 親ディレクトリ(SHINOBI)もパスに追加（パッケージとしての import 用）
+PARENT_DIR = os.path.dirname(CURRENT_DIR)
+if PARENT_DIR not in sys.path:
+    sys.path.insert(0, PARENT_DIR)
+
+try:
+    from config_manager import ConfigManager
+except ImportError:
+    from SHINOBI.src.config_manager import ConfigManager
 ConfigManager.initialize()
 
 from mfa_engine import MFAEngine, SystemState

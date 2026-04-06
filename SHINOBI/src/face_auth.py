@@ -64,6 +64,7 @@ class FaceAuth:
         同期認証。
         戻り値: (bool 成功か, float 最小距離)
         """
+        # face_recognition_models が無い場合などの内部エラーをここで吸収
         if not face_recognition or frame is None or not self.known_encodings:
             return False, 1.0
 

@@ -26,13 +26,13 @@ def run_ultimate_build():
     print("[+] SHINOBI_CORE をビルド中 (数分かかります)...")
     cmd_core = [
         "pyinstaller", "--noconsole", "--onefile", "--clean",
-        "--add-data", "SHINOBI/src;SHINOBI/src",
+        "--add-data", "SHINOBI;SHINOBI",
         "--add-data", "SHINOBI/assets/mobile_key;SHINOBI/assets/mobile_key",
         "--collect-all", "face_recognition",
         "--collect-all", "face_recognition_models",
         "--collect-all", "customtkinter",
         "--name", "SHINOBI_CORE_v4.2",
-        os.path.join("SHINOBI", "src", "main.py")
+        "main.py"
     ]
 
     # 監視バイナリ (GUARD)
