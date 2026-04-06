@@ -6,14 +6,16 @@ import random
 import logging
 import cv2
 import face_recognition
-try:
-    from ui_theme import CyberTheme, MatrixRain
-    from config_manager import ConfigManager
-    from face_auth import FaceAuth
-except ImportError:
-    from .ui_theme import CyberTheme, MatrixRain
-    from .config_manager import ConfigManager
-    from .face_auth import FaceAuth
+import os
+import sys
+
+# SHINOBI/src 自体をパスに追加（ siblings の直接 import 用）
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from ui_theme import CyberTheme, MatrixRain
+from config_manager import ConfigManager
+from face_auth import FaceAuth
 
 logger = logging.getLogger("SHINOBI.UI")
 

@@ -12,16 +12,17 @@ from PIL import Image, ImageTk
 import logging
 import sys
 
-try:
-    from config_manager import ConfigManager
-    from face_auth import FaceAuth
-    from os_control import OSRegistryController, is_admin
-    from bt_monitor import BluetoothMonitor
-except ImportError:
-    from .config_manager import ConfigManager
-    from .face_auth import FaceAuth
-    from .os_control import OSRegistryController, is_admin
-    from .bt_monitor import BluetoothMonitor
+import os
+import sys
+
+# SHINOBI/src 自体をパスに追加（ siblings の直接 import 用）
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from config_manager import ConfigManager
+from face_auth import FaceAuth
+from os_control import OSRegistryController, is_admin
+from bt_monitor import BluetoothMonitor
 
 logger = logging.getLogger("SHINOBI.Wizard")
 

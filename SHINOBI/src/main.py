@@ -16,43 +16,20 @@ PARENT_DIR = os.path.dirname(CURRENT_DIR)
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-try:
-    import config_manager
-    import mfa_engine
-    import bt_monitor
-    import face_auth
-    import browser_key
-    import os_control
-    import ui
-    import audit_watchdog
-    import keyboard_hook
-    import setup_wizard
-except ImportError:
-    # パッケージとしてのインポート (ROOT から main.py を叩いた場合)
-    from . import config_manager
-    from . import mfa_engine
-    from . import bt_monitor
-    from . import face_auth
-    from . import browser_key
-    from . import os_control
-    from . import ui
-    from . import audit_watchdog
-    from . import keyboard_hook
-    from . import setup_wizard
+# SHINOBI/src 自体をパスに追加（ siblings の直接 import 用）
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-ConfigManager = config_manager.ConfigManager
-MFAEngine = mfa_engine.MFAEngine
-SystemState = mfa_engine.SystemState
-BluetoothMonitor = bt_monitor.BluetoothMonitor
-FaceAuth = face_auth.FaceAuth
-BrowserKeyReceiver = browser_key.BrowserKeyReceiver
-OSRegistryController = os_control.OSRegistryController
-is_admin = os_control.is_admin
-ShinobiLockScreen = ui.ShinobiLockScreen
-AdminDashboard = ui.AdminDashboard
-AuditLog = audit_watchdog.AuditLog
-KeyboardHook = keyboard_hook.KeyboardHook
-SetupWizard = setup_wizard.SetupWizard
+from config_manager import ConfigManager
+from mfa_engine import MFAEngine, SystemState
+from bt_monitor import BluetoothMonitor
+from face_auth import FaceAuth
+from browser_key import BrowserKeyReceiver
+from os_control import OSRegistryController, is_admin
+from ui import ShinobiLockScreen, AdminDashboard
+from audit_watchdog import AuditLog
+from keyboard_hook import KeyboardHook
+from setup_wizard import SetupWizard
 
 ConfigManager.initialize()
 
