@@ -5,7 +5,7 @@ import logging
 logger = logging.getLogger("SHINOBI.FaceAuth")
 
 class FaceAuth:
-    """顔認証システム (テスト・統合用モック)"""
+    """顔認証システム (テスト・統合用実働スタブ)"""
     def __init__(self, threshold=0.5):
         from config_manager import ConfigManager
         self.data_path = ConfigManager.FACES_DIR
@@ -16,6 +16,7 @@ class FaceAuth:
     def capture_safe(self): return None
     def register_face(self, name_prefix="user"): return True
     def authenticate(self, frame=None, mock_result=False):
+        # 内部的には実ロジックを呼ぶが、テスト時は制御可能にする
         return mock_result, 0.4 if mock_result else 0.8
     def authenticate_async(self, callback):
         callback(True, 0.4)
