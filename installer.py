@@ -19,8 +19,12 @@ def run_ultimate_build():
     # 依存関係
     print("[+] 依存関係を解決中...")
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-    except: return
+        # Windows 固有のライブラリや暗号化ライブラリを確実に導入
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "pycryptodome", "bleak", "customtkinter", "opencv-python", "face-recognition", "qrcode[pil]"])
+        if os.name == 'nt':
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "pywin32"])
+    except Exception as e:
+        print(f"[!] 依存関係のインストールに失敗しました: {e}")
 
     # メインバイナリ (CORE)
     print("[+] SHINOBI_CORE をビルド中 (数分かかります)...")

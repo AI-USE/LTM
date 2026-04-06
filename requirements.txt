@@ -18,6 +18,7 @@ darkdetect
 
 # Windows Integration
 pywin32
+pycryptodome
 
 # Packaging
 pyinstaller
