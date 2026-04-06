@@ -19,36 +19,39 @@ class BrowserKeyReceiver:
 
     async def start_advertising(self, on_verified_callback):
         """
-        PC側でGATTサーバーを稼働させ、スマホからの接続・書き込みを待機。
+        GATTサーバーを稼働させ、外部からの書き込みを待機。
         """
         self.on_verified_callback = on_verified_callback
-        logger.info(f"BLE_GATT_SERVER ON: {self.service_uuid}")
+        logger.info(f"スマホ鍵待機中 (UUID: {self.service_uuid})")
 
-        # ⚠️ 注意: BleakのGATT Serverは Windows/Linux/macOS でインターフェースが異なる
-        # 統合されたライブラリ（bleak-gatt-server等）の使用を推奨。
-        # ここでは、実機でのデータ受信用コールバック構造を確立。
-        pass
+        # BLEAK-GATT-SERVER 相当のロジック (概念的実装)
+        # Windows API (WinRT) を直接叩く必要があるため、
+        # 実際には bleak_gatt_server ライブラリ等の外部導入が必要。
+        # ここでは、受信イベントを待ち受けるための非同期ループとして確立。
+        while not self.auth_success:
+            await asyncio.sleep(1)
 
     def on_token_received(self, handle, data):
-        """GATT Writeイベント受信時のコアロジック。"""
+        """
+        スマホ側からのGATT Writeイベント受信時のコアロジック。
+        """
         try:
-            received_token = data.decode('utf-8')
+            token = data.decode('utf-8')
             stored_token = ConfigManager.get("browser_token")
 
-            if received_token == stored_token:
-                logger.info("Mobile Token Authenticated.")
+            if token == stored_token:
+                logger.info("スマホ鍵の認証に成功しました。")
                 self.auth_success = True
                 if self.on_verified_callback:
-                    # MFAエンジンへ通知
                     self.on_verified_callback(True)
                 return True
             else:
-                logger.warning(f"Unauthorized Token Attempt: {received_token}")
+                logger.warning(f"不正なトークン入力を検知: {token}")
                 return False
         except Exception as e:
-            logger.error(f"GATT data parse error: {e}")
+            logger.error(f"GATTデータの解析中にエラー: {e}")
             return False
 
     async def simulate_receive(self, token):
-        """テストおよび統合用モック"""
+        """テストおよび統合検証用"""
         return self.on_token_received(None, token.encode('utf-8'))

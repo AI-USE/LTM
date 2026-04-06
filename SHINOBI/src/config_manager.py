@@ -4,32 +4,58 @@ import hashlib
 import sys
 import shutil
 import logging
+import platform
+import subprocess
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 
-logger = logging.getLogger("SHINOBI.SecureConfig")
+logger = logging.getLogger("SHINOBI.Config")
 
 class ConfigManager:
     """
-    SHINOBI v4.0 セキュア構成管理。
-    AES-256 暗号化による資産保護、自己修復、EXE対応。
+    SHINOBI v4.2 構成管理。
+    パス解決の完全自動化と AES 暗号化。
     """
+    # 実行ファイルまたはスクリプトのディレクトリを正確に取得
     if getattr(sys, 'frozen', False):
         BASE_DIR = os.path.dirname(sys.executable)
+        SRC_DIR = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(__file__)))
     else:
-        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # SHINOBI/src に配置されていることを想定
+        SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+        BASE_DIR = os.path.dirname(SRC_DIR)
 
     ASSETS_DIR = os.path.join(BASE_DIR, "assets")
     FACES_DIR = os.path.join(ASSETS_DIR, "faces")
     LOGS_DIR = os.path.join(BASE_DIR, "logs")
-    CONFIG_PATH = os.path.join(ASSETS_DIR, "secure_config.bin") # 暗号化バイナリ
+    CONFIG_PATH = os.path.join(ASSETS_DIR, "secure_config.bin")
     BACKUP_PATH = os.path.join(ASSETS_DIR, "secure_config_backup.bin")
+    AUDIT_DB_PATH = os.path.join(LOGS_DIR, "audit.db")
 
-    # 内部マスターキー（実運用ではマシン固有ID等から生成を推奨）
-    _MASTER_KEY = hashlib.sha256(b"SHINOBI_ULTIMATE_v4_AES_KEY").digest()
+    @staticmethod
+    def _get_hardware_id():
+        """デバイス固有のIDを取得し、暗号化キーの生成に使用する。"""
+        try:
+            if platform.system() == "Windows":
+                cmd = 'reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid'
+                output = subprocess.check_output(cmd, shell=True).decode()
+                return output.split()[-1]
+            else:
+                import uuid
+                return str(uuid.getnode())
+        except Exception:
+            return "SHINOBI_FALLBACK_ID_777"
+
+    _MASTER_KEY = hashlib.sha256(
+        (b"SHINOBI_V4.2_SALT_" + _get_hardware_id.__func__().encode())
+    ).digest()
 
     @staticmethod
     def initialize():
+        # インポートパスの調整
+        if ConfigManager.SRC_DIR not in sys.path:
+            sys.path.insert(0, ConfigManager.SRC_DIR)
+
         os.makedirs(ConfigManager.ASSETS_DIR, exist_ok=True)
         os.makedirs(ConfigManager.FACES_DIR, exist_ok=True)
         os.makedirs(ConfigManager.LOGS_DIR, exist_ok=True)
@@ -38,7 +64,6 @@ class ConfigManager:
             if os.path.exists(ConfigManager.BACKUP_PATH):
                 shutil.copy2(ConfigManager.BACKUP_PATH, ConfigManager.CONFIG_PATH)
             else:
-                # 初期デフォルト
                 default = {
                     "pin_hash": hashlib.sha256("0000".encode()).hexdigest(),
                     "rssi_threshold": -70,
@@ -48,7 +73,7 @@ class ConfigManager:
                     "browser_token": "INIT",
                     "smart_mitigation_hours": 1,
                     "heartbeat_interval_mins": 10,
-                    "reset_request_time": 0, # リセット申請時刻
+                    "reset_request_time": 0,
                     "theme": "Dark"
                 }
                 ConfigManager.save_all(default)
@@ -67,7 +92,7 @@ class ConfigManager:
             decrypted_data = ConfigManager._get_cipher().decrypt(encrypted_data)
             return json.loads(decrypted_data.decode('utf-8'))
         except Exception as e:
-            logger.error(f"Config Load Error (Corrupted?): {e}")
+            logger.error(f"構成ロードエラー: {e}")
             return {}
 
     @staticmethod
@@ -79,7 +104,7 @@ class ConfigManager:
                 f.write(encrypted_data)
             shutil.copy2(ConfigManager.CONFIG_PATH, ConfigManager.BACKUP_PATH)
         except Exception as e:
-            logger.error(f"Config Save Error: {e}")
+            logger.error(f"構成保存エラー: {e}")
 
     @staticmethod
     def get(key):

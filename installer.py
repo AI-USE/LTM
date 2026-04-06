@@ -3,52 +3,43 @@ import sys
 import subprocess
 import shutil
 
-def run_build():
+def run_ultimate_build():
     """
-    SHINOBI v4.0 統合ビルド・パッケージングスクリプト。
+    SHINOBI v4.2 究極版 統合ビルドシステム。
+    CORE と GUARD の両バイナリを一発で生成。
     """
     print("==============================================")
-    print("   SHINOBI v4.0 ULTIMATE - BUILD SYSTEM")
+    print("   SHINOBI v4.2 ULTIMATE - BUILD COMMAND")
     print("==============================================")
 
-    # 1. 環境クリーンアップ
+    # クリーンアップ
     for d in ['build', 'dist']:
-        if os.path.exists(d):
-            print(f"[+] Removing old {d} directory...")
-            shutil.rmtree(d)
+        if os.path.exists(d): shutil.rmtree(d)
 
-    # 2. 依存関係の確実なインストール
-    print("[+] Resolving dependencies from requirements.txt...")
+    # 依存関係
+    print("[+] 依存関係を解決中...")
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-    except Exception as e:
-        print(f"[!] Dependency resolution FAILED: {e}")
-        return
+    except: return
 
-    # 3. メインバイナリのビルド
-    print("[+] Compiling SHINOBI_ULTIMATE_CORE...")
+    # メインバイナリ (CORE)
+    print("[+] SHINOBI_CORE をビルド中 (数分かかります)...")
     cmd_core = [
-        "pyinstaller",
-        "--noconsole",
-        "--onefile",
-        "--clean",
+        "pyinstaller", "--noconsole", "--onefile", "--clean",
         "--add-data", "SHINOBI/src;SHINOBI/src",
         "--add-data", "SHINOBI/assets/mobile_key;SHINOBI/assets/mobile_key",
         "--collect-all", "face_recognition",
         "--collect-all", "face_recognition_models",
         "--collect-all", "customtkinter",
-        "--name", "SHINOBI_CORE_v4",
+        "--name", "SHINOBI_CORE_v4.2",
         os.path.join("SHINOBI", "src", "main.py")
     ]
 
-    # 4. ウォッチドッグバイナリのビルド
-    print("[+] Compiling SHINOBI_WATCHDOG_GUARD...")
+    # 監視バイナリ (GUARD)
+    print("[+] SHINOBI_GUARD をビルド中...")
     cmd_guard = [
-        "pyinstaller",
-        "--noconsole",
-        "--onefile",
-        "--clean",
-        "--name", "SHINOBI_GUARD_v4",
+        "pyinstaller", "--noconsole", "--onefile", "--clean",
+        "--name", "SHINOBI_GUARD_v4.2",
         os.path.join("SHINOBI", "src", "watchdog_runner.py")
     ]
 
@@ -56,12 +47,12 @@ def run_build():
         subprocess.check_call(cmd_core)
         subprocess.check_call(cmd_guard)
         print("\n==============================================")
-        print("   BUILD COMPLETED SUCCESSFULLY")
-        print(f"   Core: dist/SHINOBI_CORE_v4.exe")
-        print(f"   Guard: dist/SHINOBI_GUARD_v4.exe")
+        print("   究極版ビルド完了")
+        print(f"   コア: dist/SHINOBI_CORE_v4.2.exe")
+        print(f"   監視: dist/SHINOBI_GUARD_v4.2.exe")
         print("==============================================")
     except Exception as e:
-        print(f"\n[!] Compilation FAILED: {e}")
+        print(f"\n[!] ビルド失敗: {e}")
 
 if __name__ == "__main__":
-    run_build()
+    run_ultimate_build()
